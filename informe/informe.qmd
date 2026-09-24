@@ -1168,3 +1168,224 @@ se recuperó (de `r n2(val$y[1])` a `r n2(val$y[h])`): una tendencia determinist
 sentido, y a `r h` años el error de `r n2(abs(e_m[h]))` pies es `r n2(abs(e_m[h]) / sd(d$y))` veces la desviación estándar de toda
 la serie (`r n2(sd(d$y))`). Más allá de unos pocos años conviene reestimar la recta con datos nuevos o usar un método con
 nivel local.
+
+# Ejemplo 6. Tendencia cuadrática sobre `airmiles`
+
+## Descripción de la serie
+
+```{r}
+#| label: ej6-datos
+x <- airmiles
+d <- leer_serie(x,
+                fuente = "F.A.A. Statistical Handbook of Aviation (paquete datasets, airmiles)",
+                unidad = "Millas-pasajero de ingreso (revenue passenger miles), aerolíneas comerciales de EE. UU.")
+descripcion(x, "airmiles", d)
+```
+
+La serie es corta: solo `r nrow(d)` observaciones anuales. Eso limita todo lo que sigue: quedan
+`r nrow(d) - min(12, floor(0.2 * nrow(d)))` datos para estimar, `r min(12, floor(0.2 * nrow(d)))` para validar y muy pocos rezagos para el
+correlograma.
+
+## Patrón de la serie
+
+```{r}
+#| label: ej6-serie
+graficar_serie(d, "Ejemplo 6. Millas-pasajero de aerolíneas de EE. UU., 1937-1960")
+```
+
+```{r}
+#| label: ej6-correlograma
+#| fig-height: 6
+cg <- correlograma(d)
+cg$grafico
+```
+
+```{r}
+#| label: ej6-pruebas-serie
+#| results: asis
+n_total <- nrow(d)
+r_1 <- .contraste_rh(cg$acf, n_total, 1)
+pp(r_1, paste0("r_1 = ", n4(cg$acf[1]), " frente a una banda de ±", n4(cg$banda), " (ancha porque n = ", n_total, "): se rechaza la ",
+               "independencia. El nivel de un año casi determina el del siguiente, como en una serie que crece."))
+h_5 <- which(abs(cg$acf) < cg$banda)[1]
+r_5 <- .contraste_rh(cg$acf, n_total, h_5)
+pp(r_5, paste0("La autocorrelación baja de forma gradual y sin oscilar (", paste(n2(cg$acf[1:(h_5 - 1)]), collapse = ", "),
+               ") y solo en el rezago ", h_5, " (", n4(cg$acf[h_5]), ") entra en la banda de ±", n4(cg$banda),
+               ": un decaimiento lento y monótono es el rastro de una tendencia."))
+lb0 <- ljung_box(cg$acf, n_total, cg$m, 0)
+pp(lb0, paste0("Q = ", n4(lb0$estadistico), " con ", lb0$gl, " grados de libertad y valor p ", pv(lb0$valor_p),
+               ": se rechaza que la serie sea ruido blanco."))
+```
+
+**Lectura del patrón.** La serie crece y lo hace con curvatura: el promedio de la primera mitad es
+`r n2(mean(d$y[1:12]))` y el de la segunda `r n2(mean(d$y[13:24]))`, y el incremento anual medio pasa de
+`r n2(mean(diff(d$y[1:12])))` a `r n2(mean(diff(d$y[12:24])))`. El crecimiento se acelera, que es lo que una parábola
+$\beta_0 + \beta_1 t + \beta_2 t^2$ con $\beta_2 > 0$ sabe describir y una recta no. La alternativa natural
+sería una tendencia exponencial (crecimiento a tasa constante), pero la serie no la respalda: la pendiente del logaritmo,
+que sería constante si la tasa lo fuera, pasa de
+
+```{r}
+#| label: ej6-tasa
+z <- log(d$y); ti <- seq_len(n_total)
+pend <- function(i) cov(ti[i], z[i]) / var(ti[i])   # pendiente de mínimos cuadrados de ln y sobre t
+p_1 <- pend(1:12); p_2 <- pend(13:24)
+```
+
+`r n4(p_1)` en la primera mitad a `r n4(p_2)` en la segunda: la tasa de crecimiento se frena. Por eso la exponencial se descarta
+aquí (más abajo se mide cuánto peor pronostica) y se usa en el ejemplo 7 sobre una serie cuya tasa sí es estable.
+
+## Partición
+
+```{r}
+#| label: ej6-particion
+h <- min(12, floor(0.2 * n_total)); T_est <- n_total - h
+est <- d[seq_len(T_est), ]; val <- d[T_est + seq_len(h), ]
+```
+
+Con $T = `r n_total`$ y $h = \min\{12, \lfloor 0{,}2 \cdot `r n_total`\rfloor\} = `r h`$, el tramo de estimación va de
+`r format(est$fecha[1], "%Y")` a `r format(est$fecha[T_est], "%Y")` ($T_{est} = `r T_est`$) y el de validación de
+`r format(val$fecha[1], "%Y")` a `r format(val$fecha[h], "%Y")`. Con solo `r h` datos de validación las conclusiones sobre
+el pronóstico son indicativas, no concluyentes.
+
+## Ajuste y medidas
+
+La tendencia cuadrática no tiene constantes por elegir (sus coeficientes son la solución de las ecuaciones normales), así que
+no se usa `optimizar()`. Los `yhat` son valores ajustados de una regresión que usa todo el tramo de estimación, no
+pronósticos con información hasta $t-1$.
+
+```{r}
+#| label: ej6-ajuste
+fit <- ajustar_tendencia(est$y, "cuadratica")
+p <- fit$parametros
+pron <- fit$pronosticar(h)
+ref <- rep(est$y[T_est], h)                       # ingenuo: el último valor observado
+m_in <- .medir(est$y, fit$yhat, est$y)            # ajuste dentro del tramo de estimación
+m_val <- .medir(val$y, pron, est$y)               # h pronósticos sobre el tramo de validación
+m_ref <- .medir(val$y, ref, est$y)                # el ingenuo, mismo tramo y mismo h
+tab(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo"), 3)
+# Las alternativas descartadas, sobre el mismo tramo de validación
+m_lin <- .medir(val$y, ajustar_tendencia(est$y, "lineal")$pronosticar(h), est$y)
+m_exp <- .medir(val$y, ajustar_tendencia(est$y, "exponencial")$pronosticar(h), est$y)
+e_m <- val$y - pron; e_r <- val$y - ref           # errores de validación del método y del ingenuo
+```
+
+La parábola supera con holgura al ingenuo en validación: MASE `r n4(m_val$MASE)` contra `r n4(m_ref$MASE)`, MSE
+`r n2(m_val$MSE)` contra `r n2(m_ref$MSE)` (`r n2(100 * (1 - m_val$MSE / m_ref$MSE))` % menos) y MAPE `r n2(m_val$MAPE)` %
+contra `r n2(m_ref$MAPE)` %. Las alternativas descartadas confirman la elección: la recta tiene un MASE de validación de
+`r n4(m_lin$MASE)` (`r n2(m_lin$MASE / m_val$MASE)` veces el de la parábola) y la exponencial de `r n4(m_exp$MASE)`
+(`r n2(m_exp$MASE / m_val$MASE)` veces), porque proyecta un crecimiento porcentual que la serie ya no tenía.
+
+## Validación de los errores de un paso
+
+```{r}
+#| label: ej6-validacion
+#| fig-height: 7
+cot <- .cotas("ej06", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+ve$grafico
+```
+
+Son $N = `r ve$n`$ errores, uno por cada observación de estimación. Como los `yhat` son valores ajustados, **los errores
+coinciden con los residuos de la regresión** y las pruebas siguientes revisan a la vez los supuestos de la regresión. Con
+solo $N = `r ve$n`$ el número de rezagos es $m = `r ve$correlograma$m`$ y la banda es ancha (±`r n4(ve$correlograma$banda)`), de modo que las pruebas
+tienen poco poder; la prueba de Jarque–Bera está justo en el límite de tamaño en que su distribución asintótica es
+aceptable ($N = `r ve$n`$, no menos de veinte).
+
+```{r}
+#| label: ej6-pruebas-errores
+#| results: asis
+pp(ve$t_media, paste0("La media de los residuos es ", n4(mean(ve$e)), ": cero por construcción, porque la regresión con intercepto ",
+                      "hace que los residuos sumen cero. La prueba no aporta información; el supuesto de media cero solo se vería violado ",
+                      "por una forma funcional equivocada, que se revisa con la autocorrelación y con el gráfico de residuos."))
+pp(ve$ljung_box, paste0("Q = ", n4(ve$ljung_box$estadistico), " con ", ve$ljung_box$gl, " grados de libertad (m = ",
+                        ve$correlograma$m, ", p = 3 porque se estimaron beta_0, beta_1 y beta_2) y valor p ", pv(ve$ljung_box$valor_p),
+                        ": se rechaza que los residuos sean incorrelacionados. Con solo ", ve$ljung_box$gl, " grados de libertad ",
+                        "la prueba es poco potente, y aun así rechaza: la parábola deja estructura sin explicar (r_1 = ",
+                        n4(ve$correlograma$acf[1]), ")."))
+pp(ve$jarque_bera, paste0("JB = ", n4(ve$jarque_bera$estadistico), " con asimetría ", n4(ve$jarque_bera$A), " y curtosis ",
+                          n4(ve$jarque_bera$K), ": no hay evidencia contra la normalidad, aunque con N = ", ve$n,
+                          " la prueba detecta solo desviaciones grandes."))
+pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " queda por debajo de d_L = ", n2(cot$dL), " (N = ", ve$n,
+                            ", k' = 2): autocorrelación positiva de orden uno, con ρ ≈ ", n4(ve$durbin_watson$rho_aprox),
+                            ", coherente con r_1 = ", n4(ve$correlograma$acf[1]), ": la parábola no elimina la dependencia entre años consecutivos."))
+```
+
+## Coeficientes y supuestos de la regresión
+
+```{r}
+#| label: ej6-coeficientes
+tab(tabla_coef(fit))
+```
+
+$R^2 =$ `r n4(p$r2)`, $\hat\sigma^2 =$ `r n2(p$sigma2)` (entre $T - p =$ `r p$gl` grados de libertad), estadístico de Durbin–Watson de
+los residuos `r n4(p$dw)` y `r p$L` rezagos en el error estándar robusto.
+
+**Por qué se decide con el error estándar robusto.** Los residuos tienen autocorrelación positiva (Durbin–Watson por debajo
+de $d_L$), así que el error estándar ordinario, que supone observaciones independientes, no es confiable y sus valores p no
+son interpretables. El cambio al robusto no es uniforme: el error estándar de $\beta_0$ pasa de
+`r n2(p$tabla$ee_ordinario[1])` a `r n2(p$tabla$ee_robusto[1])`, el de $\beta_1$ de `r n2(p$tabla$ee_ordinario[2])` a
+`r n2(p$tabla$ee_robusto[2])` y el de $\beta_2$ de `r n2(p$tabla$ee_ordinario[3])` a `r n2(p$tabla$ee_robusto[3])`. Con $T = `r T_est`$ el
+estimador robusto también es poco preciso, pero es el que corrige por la autocorrelación observada. La decisión sobre cada
+coeficiente se toma con él:
+
+```{r}
+#| label: ej6-pruebas-coef
+#| results: asis
+t_b0 <- .t_coeficiente(r"(\beta_0)", p$tabla$estimacion[1], p$tabla$ee_robusto[1], p$gl, T_est)
+pp(t_b0, paste0("beta_0 = ", n2(p$tabla$estimacion[1]), " es el nivel de la parábola en t = 0. Se distingue de cero, pero el término ",
+                "independiente de una parábola ajustada a t = 1, ..., ", T_est, " es una extrapolación hacia atrás y no tiene lectura económica directa."))
+t_b1 <- .t_coeficiente(r"(\beta_1)", p$tabla$estimacion[2], p$tabla$ee_robusto[2], p$gl, T_est)
+pp(t_b1, paste0("beta_1 = ", n2(p$tabla$estimacion[2]), " es negativo: la pendiente de la parábola en t = 0 es descendente, y se rechaza ",
+                "que sea nula. No significa que el tráfico bajara; con beta_2 > 0 la parábola tiene su mínimo en t = ",
+                n2(-p$tabla$estimacion[2] / (2 * p$tabla$estimacion[3])), " y a partir de ahí sube, de modo que beta_1 y beta_2 solo se interpretan juntos."))
+t_b2 <- .t_coeficiente(r"(\beta_2)", p$tabla$estimacion[3], p$tabla$ee_robusto[3], p$gl, T_est)
+pp(t_b2, paste0("beta_2 = ", n2(p$tabla$estimacion[3]), " es el coeficiente que sostiene el ejemplo: se rechaza con claridad que sea ",
+                "nulo (t = ", n2(t_b2$estadistico), "), es decir, la curvatura es real y no un accidente de la muestra. La aceleración del ",
+                "tráfico es de ", n2(2 * p$tabla$estimacion[3]), " unidades por año al cuadrado."))
+```
+
+**Varianza constante.** Se revisa con el gráfico de residuos contra valores ajustados.
+
+```{r}
+#| label: ej6-residuos
+.grafico_residuos_ajustados(est$y - p$residuos, p$residuos, "Ejemplo 6. Residuos contra valores ajustados")
+```
+
+Los residuos no forman un abanico claro pero tampoco una nube sin forma: son positivos para los valores ajustados bajos,
+negativos en el tramo medio (hasta `r n2(min(p$residuos))`) y positivos otra vez para los altos, una U que es la huella de una
+curvatura que la parábola no capta del todo (la serie tiene una meseta hacia 1946–1948 que ninguna parábola reproduce). La
+dispersión es mayor en el tramo medio (el mayor residuo, `r n2(max(p$residuos))`, ocurre cerca de los `r n2((est$y - p$residuos)[which.max(p$residuos)])`
+ajustados) y menor en los extremos; con `r T_est` puntos no se puede decir si es un cambio de varianza o el mismo patrón de forma. Resumen de
+supuestos: la normalidad no se rechaza; la independencia se rechaza (Ljung–Box y Durbin–Watson); la forma funcional es aproximada
+(patrón en U de los residuos); y la varianza constante no puede verificarse con tan pocos datos. Conclusión práctica: la parábola describe bien la
+tendencia, no toda la dinámica.
+
+## Gráfico final
+
+```{r}
+#| label: ej6-final
+.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 6. Tendencia cuadrática: ajuste y pronóstico")
+```
+
+## Conclusión
+
+Se ajustó una tendencia cuadrática $\hat Y_t = `r n2(p$tabla$estimacion[1])` `r n2(p$tabla$estimacion[2])`\,t + `r n2(p$tabla$estimacion[3])`\,t^2$
+sobre los `r T_est` años de estimación, con $R^2 =$ `r n4(p$r2)` y el término cuadrático significativo con error
+estándar robusto ($t =$ `r n2(t_b2$estadistico)`, valor p `r pv(t_b2$valor_p)`). En los `r h` años de validación el MSE es
+`r n2(m_val$MSE)`, el MAD `r n2(m_val$MAD)` y el MASE `r n4(m_val$MASE)`, frente a `r n2(m_ref$MSE)`, `r n2(m_ref$MAD)` y
+`r n4(m_ref$MASE)` del ingenuo: reduce el MSE del ingenuo en `r n2(100 * (1 - m_val$MSE / m_ref$MSE))` %. La validación de los
+errores muestra que la parábola no agota la estructura: hay autocorrelación (Ljung–Box con $m - p =$ `r ve$ljung_box$gl` grados de
+libertad, valor p `r pv(ve$ljung_box$valor_p)`; Durbin–Watson `r n4(ve$durbin_watson$estadistico)` frente a $d_L =$ `r n2(cot$dL)`), aunque los
+residuos son compatibles con la normalidad (Jarque–Bera, valor p `r pv(ve$jarque_bera$valor_p)`). Sobre esta serie, superó a la
+recta y a la exponencial en validación.
+
+## Recomendación
+
+El pronóstico le sirve a quien planee la capacidad de una aerolínea o de un sistema aeroportuario con un horizonte de
+uno o dos años, donde el error de validación fue de `r n2(abs(e_m[1]))` y `r n2(abs(e_m[2]))`
+(`r n2(100 * abs(e_m[1]) / val$y[1])` % y `r n2(100 * abs(e_m[2]) / val$y[2])` % del valor observado). El límite es la
+extrapolación de una parábola: crece sin freno y el pronóstico a $h = `r h`$ años (`r n2(pron[h])`) pasó
+`r n2(abs(e_m[h]))` por encima de lo observado (`r n2(val$y[h])`), un `r n2(100 * abs(e_m[h]) / val$y[h])` %, y su
+error de mayor tamaño se dio en el horizonte más largo. Con `r h` datos de validación y una serie que se aplanó
+(`r n2(val$y[1])` y `r n2(val$y[2])` en los dos primeros años de validación, casi iguales) no hay base para usarla a más de dos años,
+y cualquier uso debería reestimarse cada año.
