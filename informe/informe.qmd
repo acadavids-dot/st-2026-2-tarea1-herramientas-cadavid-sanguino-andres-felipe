@@ -593,3 +593,188 @@ absoluto máximo fue de `r n2(max(abs(val$y - pron)))` (`r n2(100 * max(abs(val$
 pronosticado de `r n2(pron[1])`) y el error absoluto medio de `r n2(m_val$MAD)`, un `r n2(100 * m_val$MAD / pron[1])` %. Para
 mejorar sobre el ingenuo hace falta un método que pondere los datos con pesos decrecientes en vez de iguales, como el
 suavizamiento exponencial simple del ejemplo siguiente.
+
+# Ejemplo 3. Suavizamiento exponencial simple sobre `Nile`
+
+Este ejemplo usa la misma serie del ejemplo 2 (el enunciado permite hasta dos ejemplos por serie), de modo que la
+comparación entre los dos métodos de nivel local se hace sobre exactamente los mismos datos. La serie
+`LakeHuron`, que era la otra candidata, se descartó tras comprobar lo siguiente:
+
+```{r}
+#| label: ej3-lakehuron
+lh <- as.numeric(LakeHuron); lh_est <- lh[seq_len(length(lh) - min(12, floor(0.2 * length(lh))))]
+opt_lh <- optimizar(lh_est, "ses")
+r1_lh <- correlograma(lh)$acf[1]
+```
+
+Su nivel deriva con tal persistencia (autocorrelación de `r n4(r1_lh)` en el rezago 1) que `optimizar()` elige
+$\alpha =$ `r n2(opt_lh$optimo$alpha)`, en el borde superior de la rejilla: el pronóstico ingenuo con otro nombre.
+
+## Descripción de la serie
+
+```{r}
+#| label: ej3-datos
+x <- Nile
+d <- leer_serie(x,
+                fuente = "Durbin J, Koopman SJ (2001). Time Series Analysis by State Space Methods. Oxford University Press (paquete datasets, Nile)",
+                unidad = "Caudal anual del Nilo en Asuán (10^8 m^3)")
+descripcion(x, "Nile", d)
+```
+
+## Patrón de la serie
+
+```{r}
+#| label: ej3-serie
+graficar_serie(d, "Ejemplo 3. Caudal anual del Nilo en Asuán, 1871-1970")
+```
+
+```{r}
+#| label: ej3-correlograma
+#| fig-height: 6
+cg <- correlograma(d)
+cg$grafico
+```
+
+```{r}
+#| label: ej3-pruebas-serie
+#| results: asis
+n_total <- nrow(d)
+r_1 <- .contraste_rh(cg$acf, n_total, 1)
+pp(r_1, paste0("Con r_1 = ", n4(cg$acf[1]), " frente a una banda de ±", n4(cg$banda), " se rechaza la independencia en el ",
+               "rezago 1: el último caudal observado es informativo sobre el siguiente, que es lo que un pronóstico de nivel local ",
+               "aprovecha."))
+r_2 <- .contraste_rh(cg$acf, n_total, 2)
+pp(r_2, paste0("r_2 = ", n4(cg$acf[2]), " también es significativa, y la caída de r_1 a r_2 es de ", n4(cg$acf[1] - cg$acf[2]),
+               ": la autocorrelación decae de forma gradual y no se corta de golpe. Un decaimiento gradual es lo que deja un ",
+               "nivel que se mueve despacio, y es el patrón para el que pesos decrecientes (SES) son apropiados."))
+lb0 <- ljung_box(cg$acf, n_total, cg$m, 0)
+pp(lb0, paste0("Con Q = ", n4(lb0$estadistico), " y ", lb0$gl, " grados de libertad el valor p es ", pv(lb0$valor_p),
+               ": se rechaza que la serie sea ruido blanco, hay estructura de dependencia que aprovechar."))
+```
+
+**Lectura del patrón.** La serie no tiene tendencia sostenida (la recta explica el
+`r n2(100 * cor(seq_len(n_total), d$y)^2)` % de la variación) y su autocorrelación positiva decae despacio hasta el
+rezago `r which(abs(cg$acf) < cg$banda)[1]`. Es el patrón de un nivel local: el caudal fluctúa alrededor de un nivel que se
+desplaza (en 1898 baja de forma escalonada) y cuyo mejor estimador es un promedio con más peso en lo reciente. A
+diferencia de la media móvil, el suavizamiento exponencial simple no descarta de golpe los datos viejos: los pesos
+decrecen de forma geométrica y ninguno se pierde del todo.
+
+## Partición
+
+```{r}
+#| label: ej3-particion
+h <- min(12, floor(0.2 * n_total)); T_est <- n_total - h
+est <- d[seq_len(T_est), ]; val <- d[T_est + seq_len(h), ]
+```
+
+Con $T = `r n_total`$ y $h = `r h`$, el tramo de estimación va de `r format(est$fecha[1], "%Y")` a
+`r format(est$fecha[T_est], "%Y")` ($T_{est} = `r T_est`$) y el de validación de `r format(val$fecha[1], "%Y")` a
+`r format(val$fecha[h], "%Y")`.
+
+## Optimización de la constante
+
+$\alpha$ se elige con `optimizar()` sobre $\alpha = 0{,}02, 0{,}04, \dots, 0{,}98$, minimizando el MSE de un paso dentro
+del tramo de estimación (origen común en $t = 2$, donde todas las constantes ya pronostican).
+
+```{r}
+#| label: ej3-optimizar
+opt <- optimizar(est$y, "ses")
+opt$grafico
+```
+
+El óptimo es $\alpha =$ `r n2(opt$optimo$alpha)` con MSE `r n4(opt$optimo$mse)`, sobre `r opt$n_err` errores. **El óptimo
+es interior** (borde de la rejilla: `r opt$en_borde`): la curva tiene forma de U, con un MSE de
+`r n2(opt$rejilla$mse[1])` en $\alpha = 0{,}02$ (un nivel casi fijo, que no sigue el escalón) y de
+`r n2(opt$rejilla$mse[nrow(opt$rejilla)])` en $\alpha = 0{,}98$ (casi el ingenuo, que copia también el ruido). Como un
+$\alpha$ en el borde superior significaría que la serie no es estacionaria en media y que el ingenuo es lo mejor,
+un óptimo interior dice que el ingenuo no es lo mejor: existe una mezcla entre lo reciente y lo antiguo que supera a ambos extremos. La
+memoria efectiva equivalente es $2/\alpha - 1 =$ `r n2(2 / opt$optimo$alpha - 1)` años, es decir, una media móvil de esa
+longitud; a diferencia de ella, el peso decae en forma continua.
+
+## Ajuste y medidas
+
+```{r}
+#| label: ej3-ajuste
+fit <- ajustar_ses(est$y, opt$optimo$alpha)
+pron <- fit$pronosticar(h)
+ref <- rep(est$y[T_est], h)                       # ingenuo: el último valor observado
+m_in <- .medir(est$y, fit$yhat, est$y)            # un paso, dentro del tramo de estimación
+m_val <- .medir(val$y, pron, est$y)               # h pronósticos sobre el tramo de validación
+m_ref <- .medir(val$y, ref, est$y)                # el ingenuo, mismo tramo y mismo h
+tab(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo"))
+# La media móvil del ejemplo 2 sobre los mismos datos, para compararla en el mismo tramo de validación
+mm_ej2 <- ajustar_mm(est$y, optimizar(est$y, "mm")$optimo$k)
+m_mm <- .medir(val$y, mm_ej2$pronosticar(h), est$y)
+```
+
+En validación el suavizamiento exponencial simple supera al ingenuo en las tres medidas: MSE `r n2(m_val$MSE)` contra
+`r n2(m_ref$MSE)` (`r n2(100 * (1 - m_val$MSE / m_ref$MSE))` % menos), MAD `r n2(m_val$MAD)` contra `r n2(m_ref$MAD)` y MASE
+`r n4(m_val$MASE)` contra `r n4(m_ref$MASE)`. Sobre los mismos `r h` años la media móvil del ejemplo 2 tuvo un MASE
+de `r n4(m_mm$MASE)`. La ventaja es real pero modesta y se apoya en solo doce datos de validación: no es una diferencia
+que un contraste formal separaría de la variabilidad de la serie (desviación estándar `r n2(sd(d$y))`).
+
+## Validación de los errores de un paso
+
+```{r}
+#| label: ej3-validacion
+#| fig-height: 7
+cot <- .cotas("ej03", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+ve$grafico
+```
+
+Son $N = `r ve$n`$ errores de un paso, con $m = `r ve$correlograma$m`$ rezagos y banda de
+±`r n4(ve$correlograma$banda)`, calculada sobre $N$.
+
+```{r}
+#| label: ej3-pruebas-errores
+#| results: asis
+pp(ve$t_media, paste0("El error medio de un paso es ", n4(mean(ve$e)), " sobre una desviación de ", n4(sd(ve$e)),
+                      ": es un ", n2(100 * abs(mean(ve$e)) / sd(ve$e)), " % de la desviación, indistinguible de cero. El método no ",
+                      "sobrestima ni subestima de forma sistemática."))
+pp(ve$ljung_box, paste0("Con Q = ", n4(ve$ljung_box$estadistico), " y ", ve$ljung_box$gl, " grados de libertad (m = ",
+                        ve$correlograma$m, ", p = 1 porque se estimó alpha) no se rechaza que los errores sean incorrelacionados. Solo ",
+                        sum(abs(ve$correlograma$acf) > ve$correlograma$banda), " de los ", ve$correlograma$m, " rezagos sale de la banda, ",
+                        "un número compatible con el 5 % de falsas alarmas esperado. El suavizamiento exponencial absorbió la ",
+                        "autocorrelación que tenía la serie (r_1 = ", n4(cg$acf[1]), " pasó a ", n4(ve$correlograma$acf[1]), " en los errores)."))
+pp(ve$jarque_bera, paste0("JB = ", n4(ve$jarque_bera$estadistico), " con asimetría ", n4(ve$jarque_bera$A), " y curtosis ",
+                          n4(ve$jarque_bera$K), ": prácticamente los valores de una normal (0 y 3). No hay evidencia contra la normalidad de ",
+                          "los errores."))
+pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " supera d_U = ", n2(cot$dU), " (N = ", ve$n,
+                            ", k' = 1), aunque por un margen estrecho: no se rechaza la ausencia de autocorrelación positiva de orden ",
+                            "uno. Es coherente con r_1 = ", n4(ve$correlograma$acf[1]), ", que queda dentro de la banda."))
+```
+
+## Gráfico final
+
+```{r}
+#| label: ej3-final
+.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 3. Suavizamiento exponencial simple: ajuste y pronóstico")
+```
+
+## Conclusión
+
+Se ajustó un suavizamiento exponencial simple con $\alpha =$ `r n2(opt$optimo$alpha)`, elegida por `optimizar()`
+(MSE de un paso `r n4(opt$optimo$mse)`, óptimo interior), sobre los `r T_est` años de estimación. Dentro de la muestra el MSE
+de un paso es `r n4(m_in$MSE)`, el MAD `r n4(m_in$MAD)` y el MASE `r n4(m_in$MASE)` sobre `r m_in$N` errores. En los
+`r h` años de validación el MSE es `r n4(m_val$MSE)`, el MAD `r n4(m_val$MAD)` y el MASE `r n4(m_val$MASE)`, frente a
+`r n4(m_ref$MSE)`, `r n4(m_ref$MAD)` y `r n4(m_ref$MASE)` del ingenuo: gana en las tres medidas, con un MASE
+`r n2(100 * (1 - m_val$MASE / m_ref$MASE))` % menor, una ventaja modesta. La validación de errores es limpia: error medio
+nulo (valor p `r pv(ve$t_media$valor_p)`), sin autocorrelación conjunta (Ljung–Box, valor p `r pv(ve$ljung_box$valor_p)`),
+normales (Jarque–Bera, valor p `r pv(ve$jarque_bera$valor_p)`) y sin autocorrelación de orden uno detectable
+(Durbin–Watson `r n4(ve$durbin_watson$estadistico)` frente a $d_U =$ `r n2(cot$dU)`). A diferencia de la media móvil del
+ejemplo 2, supera al ingenuo en las tres medidas (MASE `r n4(m_val$MASE)` contra `r n4(m_mm$MASE)` de aquella), y a
+diferencia de la media simple del ejemplo 1 sus errores pasan las cuatro pruebas.
+
+## Recomendación
+
+El pronóstico le sirve a quien necesite el caudal esperado de los próximos años, por ejemplo para una primera
+planeación del uso del agua o de la generación hidroeléctrica. Como el suavizamiento exponencial simple da una línea
+plana, el horizonte razonable es de uno a tres años; más allá, una línea plana ignora que el nivel puede cambiar de
+escalón, como ocurrió en 1898. El límite es
+la precisión: en los `r h` años de validación el error absoluto máximo fue de `r n2(max(abs(val$y - pron)))`
+(`r n2(100 * max(abs(val$y - pron)) / pron[1])` % del valor pronosticado de `r n2(pron[1])`) y el error absoluto medio de
+`r n2(m_val$MAD)`, un `r n2(100 * m_val$MAD / pron[1])` %. Ese error no se reduce cambiando de constante, porque la
+gráfica de optimización muestra que el MSE apenas mejora en torno al óptimo y el ruido propio de la serie
+(desviación estándar `r n2(sd(d$y))`) domina; acotarlo probablemente exigiría variables explicativas que este
+método no usa.
