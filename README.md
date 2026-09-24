@@ -1,4 +1,4 @@
-<URL-DEL-REPOSITORIO-PENDIENTE>
+https://github.com/acadavids-dot/st-2026-2-tarea1-herramientas-cadavid-sanguino-andres-felipe
 
 # Tarea 1 — Caja de herramientas de pronóstico
 
