@@ -232,3 +232,69 @@ durbin_watson <- function(e, dL = NULL, dU = NULL) {
     n = N, lado = lado, rho_aprox = 1 - d / 2
   )
 }
+
+# ---- medidas --------------------------------------------------------------------------
+
+#' medidas(y, yhat, y_entrenamiento, s = 1)
+#'
+#' Descripción: MSE, MAD, MAPE y MASE de un pronóstico, sobre los pares (y_t, yhat_t) sin NA.
+#'
+#' Ecuaciones (e_t = y_t - yhat_t, N = número de pares sin NA):
+#'   MSE  = (1/N) sum e_t^2
+#'   MAD  = (1/N) sum |e_t|
+#'   MAPE = (100/N) sum |e_t / y_t|                  (en %)
+#'   MASE = MAD / [ (1/(T-s)) sum_{t=s+1}^{T} |Y_t - Y_{t-s}| ]
+#'   donde el denominador se calcula sobre `y_entrenamiento` (el tramo de estimación, con
+#'   T = su longitud), no sobre `y`: es el MAD dentro de muestra del pronóstico ingenuo
+#'   (s = 1) o ingenuo estacional (s = frecuencia). MASE < 1 significa que el método gana
+#'   al ingenuo (Clase 3, Parte III; Hyndman y Koehler, 2006).
+#'
+#' Tratamiento de NA: se descartan los pares con yhat = NA (el calentamiento del método) y N
+#'   cuenta los que quedan. y debe venir completo: un NA en y es un error, no calentamiento.
+#'
+#' MAPE con ceros: si algún y_t de los pares usados vale 0, el MAPE no está definido; se
+#'   devuelve NA con una advertencia (el dato no se omite en silencio).
+#'
+#' @param y   observaciones del tramo evaluado (vector numérico sin NA).
+#' @param yhat  pronósticos de esas observaciones (misma longitud; NA en el calentamiento).
+#' @param y_entrenamiento  serie del tramo de estimación, para la escala del MASE.
+#' @param s   período del ingenuo de referencia: 1 (series no estacionales) o la frecuencia.
+#' @return tibble de una fila con N, MSE, MAD, MAPE y MASE; el atributo `escala_mase` guarda
+#'   el denominador del MASE.
+#'
+#' Referencia: Clase 3, Parte III (tres medidas usuales y la que falta).
+medidas <- function(y, yhat, y_entrenamiento, s = 1) {
+  stopifnot(
+    "y debe ser un vector numérico sin NA" = is.numeric(y) && length(y) > 0L && !anyNA(y),
+    "yhat debe ser numérico y de la misma longitud que y" =
+      is.numeric(yhat) && length(yhat) == length(y),
+    "y_entrenamiento debe ser un vector numérico sin NA" =
+      is.numeric(y_entrenamiento) && length(y_entrenamiento) > 0L && !anyNA(y_entrenamiento),
+    "s debe ser un entero positivo" =
+      is.numeric(s) && length(s) == 1L && !is.na(s) && s >= 1 && s == floor(s)
+  )
+  stopifnot("y_entrenamiento debe tener más de s observaciones" = length(y_entrenamiento) > s)
+
+  usar <- !is.na(yhat)
+  N <- sum(usar)
+  stopifnot("no hay ningún par (y, yhat) sin NA para evaluar" = N >= 1L)
+  y_u <- y[usar]
+  e <- y_u - yhat[usar]
+
+  if (any(y_u == 0)) {
+    warning("MAPE no definido: ", sum(y_u == 0), " de los ", N,
+            " valores observados son 0; se devuelve NA", call. = FALSE)
+    mape <- NA_real_
+  } else {
+    mape <- 100 * mean(abs(e / y_u))
+  }
+
+  mad <- mean(abs(e))
+  escala <- mean(abs(diff(y_entrenamiento, lag = s)))
+  stopifnot("la escala del MASE es cero: y_entrenamiento es constante" = escala > 0)
+
+  res <- tibble::tibble(N = as.integer(N), MSE = mean(e^2), MAD = mad, MAPE = mape,
+                        MASE = mad / escala)
+  attr(res, "escala_mase") <- escala
+  res
+}
