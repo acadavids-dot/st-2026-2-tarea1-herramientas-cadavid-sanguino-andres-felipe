@@ -258,3 +258,163 @@ Las `r nrow(verif)` verificaciones pasan: la mayor diferencia relativa de las eq
 `r cient(max(verif$dif[5:9]), 3)`, la de los coeficientes contra `lm()` es
 `r cient(verif$dif[10], 3)` (tolerancia $10^{-8}$) y las cifras de las notas se
 reproducen dentro de media unidad de la última cifra publicada.
+
+# Ejemplo 1. Media simple sobre `discoveries`
+
+## Descripción de la serie
+
+```{r}
+#| label: ej1-datos
+x <- discoveries
+d <- leer_serie(x,
+                fuente = "The World Almanac and Book of Facts, 1975 Edition, pages 315-318 (paquete datasets, discoveries)",
+                unidad = "Descubrimientos importantes por año (número)")
+descripcion(x, "discoveries", d)
+```
+
+La serie cuenta los «grandes» inventos y descubrimientos científicos de cada año. Al ser un conteo puede valer
+cero, y de hecho hay `r sum(d$y == 0)` años sin descubrimientos: por eso el MAPE no está definido en este ejemplo.
+
+## Patrón de la serie
+
+```{r}
+#| label: ej1-serie
+graficar_serie(d, "Ejemplo 1. Descubrimientos importantes por año, 1860-1959")
+```
+
+```{r}
+#| label: ej1-correlograma
+#| fig-height: 6
+cg <- correlograma(d)
+cg$grafico
+```
+
+Contraste individual de las autocorrelaciones que sostienen la lectura y prueba conjunta sobre la serie
+($p = 0$: no se ha estimado nada):
+
+```{r}
+#| label: ej1-pruebas-serie
+#| results: asis
+n_total <- nrow(d)
+r_1 <- .contraste_rh(cg$acf, n_total, 1)
+pp(r_1, paste0("La autocorrelación en el rezago 1 es ", n4(cg$acf[1]), ", mayor que la banda de ±", n4(cg$banda),
+               ": cada año se parece algo al anterior. Es la más grande de un grupo pequeño: ",
+               sum(abs(cg$acf) > cg$banda), " de los ", cg$m, " rezagos salen de la banda, todos entre los primeros."))
+r_4 <- .contraste_rh(cg$acf, n_total, 4)
+pp(r_4, paste0("En el rezago 4 la autocorrelación baja a ", n4(cg$acf[4]), ", dentro de la banda de ±", n4(cg$banda),
+               ": la memoria de la serie se agota en pocos años. Una tendencia, en cambio, mantendría autocorrelaciones ",
+               "positivas y lentas en decaer, y aquí no ocurre."))
+lb0 <- ljung_box(cg$acf, n_total, cg$m, 0)
+pp(lb0, paste0("Con Q = ", n4(lb0$estadistico), " y ", lb0$gl, " grados de libertad el valor p es ", pv(lb0$valor_p),
+               ", apenas por encima del 5 %: no se rechaza que las primeras ", cg$m, " autocorrelaciones sean nulas, aunque la ",
+               "evidencia está en el límite. La dependencia de la serie es débil y de corto alcance."))
+```
+
+**Lectura del patrón.** La serie oscila alrededor de un nivel de unos tres descubrimientos por año, sin tendencia
+apreciable: la recta de tendencia explica solo el `r n2(100 * cor(seq_len(n_total), d$y)^2)` % de la
+variación, y el promedio de la primera mitad (`r n2(mean(d$y[1:50]))`) y el de la segunda (`r n2(mean(d$y[51:100]))`)
+difieren en menos de una desviación estándar (`r n2(sd(d$y))`). Ese es el supuesto de la media simple: un nivel
+constante con perturbaciones sin estructura, de modo que el mejor pronóstico a cualquier horizonte es la media.
+El supuesto se cumple de forma aproximada y no exacta: hay una autocorrelación débil en los primeros rezagos y una
+ligera deriva a la baja del nivel, que se retomarán al validar los errores.
+
+## Partición
+
+```{r}
+#| label: ej1-particion
+h <- min(12, floor(0.2 * n_total)); T_est <- n_total - h
+est <- d[seq_len(T_est), ]; val <- d[T_est + seq_len(h), ]
+```
+
+La serie tiene $T = `r n_total`$ observaciones y $h = \min\{12, \lfloor 0{,}2 \cdot `r n_total`\rfloor\} = `r h`$. El
+tramo de estimación es de `r format(est$fecha[1], "%Y")` a `r format(est$fecha[T_est], "%Y")`
+($T_{est} = `r T_est`$) y el de validación de `r format(val$fecha[1], "%Y")` a `r format(val$fecha[h], "%Y")`
+($h = `r h`$).
+
+## Ajuste y medidas
+
+La media simple no tiene constantes ni ventanas por elegir, así que no se usa `optimizar()`. Se ajusta sobre el tramo
+de estimación y se compara con el pronóstico ingenuo $\hat Y_{T+h} = Y_T$ sobre el mismo tramo de validación:
+
+```{r}
+#| label: ej1-ajuste
+fit <- ajustar_media(est$y)
+pron <- fit$pronosticar(h)
+ref <- rep(est$y[T_est], h)                       # ingenuo: el último valor observado
+m_in <- .medir(est$y, fit$yhat, est$y)            # un paso, dentro del tramo de estimación
+m_val <- .medir(val$y, pron, est$y)               # h pronósticos sobre el tramo de validación
+m_ref <- .medir(val$y, ref, est$y)                # el ingenuo, mismo tramo y mismo h
+tab(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo"))
+```
+
+El nivel estimado es $\bar Y_{T_{est}} =$ `r n4(fit$parametros$media)` descubrimientos por año. El MAPE es `NA` en las
+tres filas porque hay ceros entre los datos evaluados; la función avisa y no omite el dato. El MASE se escala con
+el error absoluto medio del ingenuo de un paso en el tramo de estimación (`r n4(attr(m_in, "escala_mase"))`).
+
+## Validación de los errores de un paso
+
+```{r}
+#| label: ej1-validacion
+#| fig-height: 7
+cot <- .cotas("ej01", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+ve$grafico
+```
+
+Son $N = `r ve$n`$ errores de un paso (uno menos que $T_{est}$: el primero no tiene pronóstico), con
+$m = `r ve$correlograma$m`$ rezagos y banda de ±`r n4(ve$correlograma$banda)`, calculada sobre $N$.
+
+```{r}
+#| label: ej1-pruebas-errores
+#| results: asis
+pp(ve$t_media, paste0("El error medio de un paso es ", n4(mean(ve$e)), " con desviación ", n4(sd(ve$e)),
+                      ": no se distingue de cero, así que dentro de la muestra la media simple no sobrestima ni subestima ",
+                      "en promedio."))
+pp(ve$ljung_box, paste0("Con Q = ", n4(ve$ljung_box$estadistico), " y ", ve$ljung_box$gl, " grados de libertad (m = ",
+                        ve$correlograma$m, ", p = 0) no se rechaza que los errores sean incorrelacionados en conjunto, aunque ",
+                        "individualmente r_1 = ", n4(ve$correlograma$acf[1]), " y r_2 = ", n4(ve$correlograma$acf[2]),
+                        " superan la banda de ±", n4(ve$correlograma$banda), ": el estadístico conjunto reparte la evidencia entre ",
+                        ve$correlograma$m, " rezagos y pierde potencia frente a una dependencia que solo vive en los primeros."))
+pp(ve$jarque_bera, paste0("JB = ", n4(ve$jarque_bera$estadistico), " con asimetría ", n4(ve$jarque_bera$A),
+                          " y curtosis ", n4(ve$jarque_bera$K), " (la normal tiene 0 y 3): los errores tienen cola derecha pesada, ",
+                          "como corresponde a un conteo que llega a ", max(d$y), " y no baja de cero. Con N = ", ve$n,
+                          " la prueba t de media cero sigue siendo razonable por el teorema central del límite, pero se ",
+                          "anota que la normalidad no se cumple."))
+pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " queda por debajo de d_L = ", n2(cot$dL),
+                            " (N = ", ve$n, ", k' = 1): hay autocorrelación positiva de orden uno, con ρ ≈ ",
+                            n4(ve$durbin_watson$rho_aprox), ", coherente con r_1 = ", n4(ve$correlograma$acf[1]),
+                            ". Durbin–Watson, que apunta a una sola alternativa (AR(1)), detecta lo que Ljung–Box, que ",
+                            "reparte su potencia entre muchos rezagos, no alcanza a rechazar."))
+```
+
+## Gráfico final
+
+```{r}
+#| label: ej1-final
+.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 1. Media simple: ajuste y pronóstico")
+```
+
+## Conclusión
+
+Se ajustó la media simple sobre los `r T_est` años de estimación (`r format(est$fecha[1], "%Y")`–`r format(est$fecha[T_est], "%Y")`),
+con un nivel estimado de `r n4(fit$parametros$media)` descubrimientos por año. Dentro de la muestra, a un paso,
+el MSE es `r n4(m_in$MSE)`, el MAD `r n4(m_in$MAD)` y el MASE `r n4(m_in$MASE)` sobre `r m_in$N` errores. Sobre los
+`r h` años de validación el MSE es `r n4(m_val$MSE)`, el MAD `r n4(m_val$MAD)` y el MASE `r n4(m_val$MASE)`, frente
+a `r n4(m_ref$MSE)`, `r n4(m_ref$MAD)` y `r n4(m_ref$MASE)` del ingenuo: la media simple gana al ingenuo y reduce su
+MSE en `r n2(100 * (1 - m_val$MSE / m_ref$MSE))` %. La validación de errores muestra un error medio indistinguible de
+cero (valor p `r pv(ve$t_media$valor_p)`) y autocorrelación conjunta no significativa (Ljung–Box, valor p
+`r pv(ve$ljung_box$valor_p)`), pero también autocorrelación positiva de orden uno (Durbin–Watson
+`r n4(ve$durbin_watson$estadistico)` frente a $d_L =$ `r n2(cot$dL)`) y errores no normales (Jarque–Bera, valor p
+`r pv(ve$jarque_bera$valor_p)`). Que gane al ingenuo es esperable en una serie sin tendencia: el ingenuo hereda todo
+el ruido del último año y la media lo promedia.
+
+## Recomendación
+
+El pronóstico le sirve a quien necesite el número esperado de descubrimientos por año en un horizonte de pocos años
+y sin exigir precisión de un año concreto, por ejemplo para dimensionar un archivo o un boletín de novedades. Como
+la media simple da una línea plana, el horizonte razonable es corto: en los `r h` años de validación el MASE fue
+`r n4(m_val$MASE)` y el método se apoya en que el nivel no cambie. El límite está en esa deriva del nivel: el
+pronóstico de `r n2(pron[1])` sobrestimó en `r sum(val$y - pron < 0)` de los `r h` años, con un error medio de validación de
+`r n2(mean(val$y - pron))` descubrimientos por año (`r n2(100 * mean(val$y - pron) / pron[1])` % del nivel pronosticado),
+porque el nivel real de esos años (`r n2(mean(val$y))`) ya estaba por debajo del promedio histórico. Si el nivel
+sigue bajando, un método con memoria local (media móvil o suavizamiento exponencial) reaccionaría antes.
