@@ -252,3 +252,30 @@ for (p in list(ve$t_media, ve$ljung_box, ve$jarque_bera, ve$durbin_watson)) .lin
 .guardar_fig(.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 2. Media móvil: ajuste y pronóstico"),
              "ej02-mm-nile-pronostico.png")
 resumen[[2]] <- .fila_resumen(2, "Nile", fit, m_val, m_ref)
+
+# ======================================================================================
+# Ejemplo 3. Suavizamiento exponencial simple sobre Nile
+# ======================================================================================
+cat("\n== Ejemplo 3: suavizamiento exponencial simple sobre Nile ==\n")
+# Misma serie del ejemplo 2 (el enunciado permite dos ejemplos por serie): d, est y val
+# ya están cargados; se repite el gráfico y el correlograma con el nombre de este ejemplo.
+cat(sprintf("T = %d, h = %d, T_est = %d; corte entre %s y %s\n", n_total, h, T_est, d$fecha[T_est], d$fecha[T_est + 1]))
+.guardar_fig(graficar_serie(d, "Ejemplo 3. Caudal anual del Nilo en Asuán, 1871-1970"), "ej03-ses-nile-serie.png")
+.guardar_fig(cg$grafico, "ej03-ses-nile-correlograma.png", alto = 6)
+
+opt <- optimizar(est$y, "ses")
+cat(sprintf("Óptimo: alpha = %s (MSE = %s); en el borde de la rejilla: %s\n", format(opt$optimo$alpha),
+            .fmt_num(opt$optimo$mse), opt$en_borde))
+.guardar_fig(opt$grafico, "ej03-ses-nile-optimizacion.png")
+fit <- ajustar_ses(est$y, opt$optimo$alpha)
+pron <- fit$pronosticar(h); ref <- rep(est$y[T_est], h)
+m_in <- .medir(est$y, fit$yhat, est$y); m_val <- .medir(val$y, pron, est$y); m_ref <- .medir(val$y, ref, est$y)
+print(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo"), digits = 5, row.names = FALSE)
+cot <- .cotas("ej03", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+cat(sprintf("Validación de errores (N = %d):\n", ve$n))
+for (p in list(ve$t_media, ve$ljung_box, ve$jarque_bera, ve$durbin_watson)) .linea(p)
+.guardar_fig(ve$grafico, "ej03-ses-nile-errores.png", alto = 7)
+.guardar_fig(.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 3. Suavizamiento exponencial simple: ajuste y pronóstico"),
+             "ej03-ses-nile-pronostico.png")
+resumen[[3]] <- .fila_resumen(3, "Nile", fit, m_val, m_ref)
