@@ -47,7 +47,7 @@
 #'
 #' Sobre T: es el número de valores de la sucesión de la que salen las r_h, no el T de la
 #'   serie original. Con errores de un método es el número de errores sin NA. Es el mismo
-#'   n que usa Box.test() (la longitud de x).
+#'   n que usa Box.test de stats (la longitud de x).
 #'
 #' @param r  vector numérico con las autocorrelaciones r_1, r_2, ...; se usan las m primeras.
 #' @param T  número de observaciones de la sucesión que generó las r_h.
@@ -91,5 +91,62 @@ ljung_box <- function(r, T, m, p) {
     region = sprintf(r"($Q_m > \chi^2_{0{,}95;\,%d} = %s$)", as.integer(gl), .fmt_num(valor_critico)),
     decision = .decision(Q > valor_critico),
     n = T, m = m, p = p
+  )
+}
+
+# ---- jarque_bera ----------------------------------------------------------------------
+
+#' jarque_bera(e)
+#'
+#' Descripción: prueba de normalidad de Jarque–Bera sobre los errores de un método.
+#'
+#' Ecuaciones (momentos centrales con divisor N, no N - 1):
+#'   m_k = (1/N) sum (e_t - ebar)^k,  A = m_3 / m_2^(3/2),  K = m_4 / m_2^2,
+#'   JB = N/6 [ A^2 + (K - 3)^2 / 4 ]  ~  chi^2_2 bajo H0 (asintótica).
+#'   Bajo normalidad A = 0 y K = 3.
+#'
+#' Advertencia: es una prueba asintótica. Con N < 20 la función devuelve el campo
+#'   `advertencia` (cadena; NULL si N >= 20) y la decisión debe reportarse con esa
+#'   salvedad. La normalidad no mejora el pronóstico puntual: solo habilita intervalos con
+#'   cuantiles normales (Clase 3).
+#'
+#' @param e  vector numérico sin NA (errores de un paso ya sin el calentamiento).
+#' @return lista con los campos comunes de las pruebas y además n (= N), A, K y
+#'   advertencia.
+#'
+#' Referencia: enunciado, sección 2(d); Clase 3, Parte III (Jarque y Bera, 1987).
+jarque_bera <- function(e) {
+  stopifnot(
+    "e debe ser un vector numérico sin NA" = is.numeric(e) && length(e) > 0L && !anyNA(e),
+    "se necesitan al menos 3 errores" = length(e) >= 3L
+  )
+  N <- length(e)
+  desv <- e - mean(e)
+  m2 <- mean(desv^2)
+  stopifnot("los errores son todos iguales: asimetría y curtosis no están definidas" = m2 > 0)
+  m3 <- mean(desv^3)
+  m4 <- mean(desv^4)
+  A <- m3 / m2^(3 / 2)
+  K <- m4 / m2^2
+  JB <- N / 6 * (A^2 + (K - 3)^2 / 4)
+  valor_critico <- stats::qchisq(0.95, df = 2)
+
+  list(
+    nombre = "Prueba de Jarque–Bera",
+    H0 = r"($H_0:\ A = 0\ \text{y}\ K = 3$ (errores normales))",
+    H1 = r"($H_1:\ A \neq 0\ \text{o}\ K \neq 3$)",
+    formula = r"($JB = \dfrac{N}{6}\left[A^2 + \dfrac{(K-3)^2}{4}\right]\ \overset{H_0}{\sim}\ \chi^2_2$, con $A = m_3/m_2^{3/2}$ y $K = m_4/m_2^2$)",
+    estadistico = JB,
+    gl = 2L,
+    valor_critico = valor_critico,
+    valor_p = stats::pchisq(JB, df = 2, lower.tail = FALSE),
+    region = sprintf(r"($JB > \chi^2_{0{,}95;\,2} = %s$)", .fmt_num(valor_critico)),
+    decision = .decision(JB > valor_critico),
+    n = N, A = A, K = K,
+    advertencia = if (N < 20L) {
+      sprintf("N = %d < 20: Jarque–Bera es una prueba asintótica y su decisión no es confiable con tan pocos errores.", N)
+    } else {
+      NULL
+    }
   )
 }
