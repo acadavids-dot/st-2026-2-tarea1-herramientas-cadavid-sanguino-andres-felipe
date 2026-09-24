@@ -259,3 +259,146 @@ ajustar_dmm <- function(y, k) {
     n_param = 1L
   )
 }
+
+# ---- Tendencias por mínimos cuadrados -------------------------------------------------
+
+# Matriz de diseño a mano para t = (t_1, ...): [1, t] en la lineal y en la exponencial
+# (que es lineal en logaritmos) y [1, t, t^2] en la cuadrática.
+.matriz_diseno <- function(t, tipo) {
+  if (tipo == "cuadratica") cbind(1, t, t^2) else cbind(1, t)
+}
+
+# Lleva un valor de la escala de la regresión (lineal o logarítmica) a la escala de Y:
+# identidad en las lineales; exp() por el factor de retransformación en la exponencial.
+.a_escala_y <- function(valor, tipo, factor) {
+  if (tipo == "exponencial") exp(valor) * factor else valor
+}
+
+# Pronosticador de las tendencias: evalúa la tendencia en t = n + 1, ..., n + h. Fábrica
+# aparte para que el closure capture solo beta, n, tipo y factor.
+.pronosticador_tendencia <- function(beta, n, tipo, factor) {
+  force(beta); force(n); force(tipo); force(factor)
+  function(h) {
+    .validar_h(h)
+    .a_escala_y(drop(.matriz_diseno(n + seq_len(h), tipo) %*% beta), tipo, factor)
+  }
+}
+
+# Varianza robusta de Newey–West (HAC) con núcleo de Bartlett, escrita a mano:
+#   Gamma_l = sum_{t=l+1}^{T} u_t u_{t-l} x_t x_{t-l}',  l = 0, ..., L
+#   S = Gamma_0 + sum_{l=1}^{L} (1 - l/(L + 1)) (Gamma_l + Gamma_l')
+#   V = (X'X)^{-1} S (X'X)^{-1}
+# Sin corrección por grados de libertad (no se multiplica por T/(T - p)). Cada fila de
+# XU es u_t x_t, así que Gamma_l = XU[(l+1):T, ]' XU[1:(T-l), ] sin bucles sobre t.
+# Los pesos de Bartlett 1 - l/(L + 1) mantienen S semidefinida positiva.
+.varianza_hac <- function(X, u, L) {
+  n <- nrow(X)
+  XU <- X * u                              # u se recicla por columnas: fila t = u_t x_t
+  S <- crossprod(XU)                       # Gamma_0
+  for (l in seq_len(L)) {
+    G <- crossprod(XU[(l + 1L):n, , drop = FALSE], XU[1:(n - l), , drop = FALSE])
+    S <- S + (1 - l / (L + 1)) * (G + t(G))
+  }
+  XtXi <- solve(crossprod(X))
+  XtXi %*% S %*% XtXi
+}
+
+#' ajustar_tendencia(y, tipo = c("lineal", "cuadratica", "exponencial"), corregir_sesgo = FALSE)
+#'
+#' Descripción: tendencia determinista en t = 1, ..., T estimada por mínimos cuadrados con
+#'   las ecuaciones normales. Es el método para una serie con tendencia global estable.
+#'
+#' Ecuaciones:
+#'   lineal:       Y_t = b0 + b1 t + e_t
+#'   cuadrática:   Y_t = b0 + b1 t + b2 t^2 + e_t
+#'   exponencial:  ln Y_t = a + theta t + e_t,  con b0 = e^a y b1 = e^theta (Y = b0 b1^t).
+#'   bhat = solve(crossprod(X), crossprod(X, z)), con X construida a mano y z = y
+#'   (o ln y en la exponencial). No se usa la regresión de stats.
+#'
+#' Exponencial: se detiene si algún Y_t <= 0. Ojo: e^{ahat + thetahat t} estima la MEDIANA
+#'   condicional de Y_t, no la media (Proposición 4 de la Clase 4). Con
+#'   corregir_sesgo = TRUE se multiplica por e^{sigma2hat_ln / 2}, con sigma2hat_ln =
+#'   SCR/(T - 2) de la regresión en logaritmos (corrección lognormal: supone errores
+#'   normales; la de Duan, que no lo supone, no se implementa). Solo aplica a "exponencial".
+#'
+#' Calentamiento: ninguno. yhat son los VALORES AJUSTADOS de la regresión sobre todo el
+#'   tramo de estimación, así que NO son pronósticos con información hasta t - 1: la
+#'   regresión usó toda la muestra, incluidos los datos posteriores a t. Por eso el MSE
+#'   dentro de muestra de una tendencia es optimista frente al de los métodos de
+#'   suavizamiento y no debe compararse con él sin decirlo. errores = y - yhat en la
+#'   escala original.
+#' Pronóstico extramuestral: la tendencia evaluada en t = T + 1, ..., T + h (multiplicada
+#'   por el factor de sesgo en la exponencial).
+#'
+#' Errores estándar: ordinario, sqrt(sigma2hat [(X'X)^{-1}]_jj) con sigma2hat = SCR/(T - p);
+#'   y robusto HAC (Newey–West, núcleo de Bartlett, L = floor(4 (T/100)^(2/9)) rezagos, sin
+#'   corrección por grados de libertad; ver .varianza_hac). El estadístico t usa el EE
+#'   robusto y su valor p la distribución t con T - p grados de libertad (elección
+#'   documentada: con T pequeño es más conservadora que la normal). En la exponencial la
+#'   tabla, R^2, sigma2hat, DW y residuos están en la escala logarítmica, que es la de
+#'   la regresión y donde valen los supuestos.
+#'
+#' @param y              vector numérico ordenado, sin NA (y > 0 en la exponencial).
+#' @param tipo           "lineal", "cuadratica" o "exponencial".
+#' @param corregir_sesgo TRUE/FALSE; ver arriba.
+#' @return objeto de clase "metodo_pronostico". En parametros:
+#'   tipo, coef (vector de la regresión, comparable con los coeficientes de la regresión de R), coef_exp (b0 y b1 en
+#'   la escala original, solo exponencial), tabla (tibble: coeficiente, estimacion,
+#'   ee_ordinario, ee_robusto, t_robusto, valor_p), r2, sigma2 (SCR/(T - p)), dw (estadístico
+#'   de Durbin–Watson de los residuos), residuos, L (rezagos HAC), gl (T - p), factor_sesgo.
+#'   n_param = 2 (lineal, exponencial) o 3 (cuadrática).
+#'
+#' Referencia: Clase 4, Parte VI (tendencias, HAC y retransformación); enunciado 2(b).
+ajustar_tendencia <- function(y, tipo = c("lineal", "cuadratica", "exponencial"),
+                              corregir_sesgo = FALSE) {
+  tipo <- match.arg(tipo)
+  y <- .validar_serie(y)
+  stopifnot("corregir_sesgo debe ser TRUE o FALSE" =
+              is.logical(corregir_sesgo) && length(corregir_sesgo) == 1L && !is.na(corregir_sesgo))
+  if (tipo == "exponencial") {
+    stopifnot("la tendencia exponencial exige y > 0 en todos los datos" = all(y > 0))
+  }
+
+  n <- length(y)
+  p <- if (tipo == "cuadratica") 3L else 2L
+  stopifnot("length(y) debe superar el número de coeficientes" = n > p)
+
+  t <- seq_len(n)
+  z <- if (tipo == "exponencial") log(y) else y   # variable sobre la que se hace la regresión
+  X <- .matriz_diseno(t, tipo)
+  beta <- drop(solve(crossprod(X), crossprod(X, z)))  # ecuaciones normales
+  ajustado <- drop(X %*% beta)
+  u <- z - ajustado                                    # residuos de la regresión
+  scr <- sum(u^2)
+  gl <- n - p
+  sigma2 <- scr / gl
+  r2 <- 1 - scr / sum((z - mean(z))^2)
+
+  L <- floor(4 * (n / 100)^(2 / 9))                    # regla del enunciado para Bartlett
+  ee_ord <- sqrt(sigma2 * diag(solve(crossprod(X))))
+  ee_rob <- sqrt(diag(.varianza_hac(X, u, L)))
+  t_rob <- beta / ee_rob
+
+  nombres <- if (tipo == "exponencial") c("a", "theta") else paste0("beta", 0:(p - 1L))
+  tabla <- tibble::tibble(
+    coeficiente = nombres, estimacion = beta, ee_ordinario = ee_ord, ee_robusto = ee_rob,
+    t_robusto = t_rob, valor_p = 2 * stats::pt(-abs(t_rob), df = gl)
+  )
+
+  # Factor de retransformación: 1 salvo en la exponencial con corrección lognormal.
+  factor <- if (tipo == "exponencial" && corregir_sesgo) exp(sigma2 / 2) else 1
+  yhat <- .a_escala_y(ajustado, tipo, factor)
+
+  parametros <- list(
+    tipo = tipo, coef = stats::setNames(beta, nombres),
+    coef_exp = if (tipo == "exponencial") c(beta0 = exp(beta[[1]]), beta1 = exp(beta[[2]])),
+    tabla = tabla, r2 = r2, sigma2 = sigma2, dw = durbin_watson(u)$estadistico,
+    residuos = u, L = L, gl = gl, factor_sesgo = factor
+  )
+
+  .nuevo_metodo(
+    metodo = sprintf("Tendencia %s", tipo), y = y, yhat = yhat,
+    pronosticar = .pronosticador_tendencia(beta, n, tipo, factor),
+    parametros = parametros, n_param = p
+  )
+}
