@@ -418,3 +418,178 @@ pronóstico de `r n2(pron[1])` sobrestimó en `r sum(val$y - pron < 0)` de los `
 `r n2(mean(val$y - pron))` descubrimientos por año (`r n2(100 * mean(val$y - pron) / pron[1])` % del nivel pronosticado),
 porque el nivel real de esos años (`r n2(mean(val$y))`) ya estaba por debajo del promedio histórico. Si el nivel
 sigue bajando, un método con memoria local (media móvil o suavizamiento exponencial) reaccionaría antes.
+
+# Ejemplo 2. Media móvil sobre `Nile`
+
+## Descripción de la serie
+
+```{r}
+#| label: ej2-datos
+x <- Nile
+d <- leer_serie(x,
+                fuente = "Durbin J, Koopman SJ (2001). Time Series Analysis by State Space Methods. Oxford University Press (paquete datasets, Nile)",
+                unidad = "Caudal anual del Nilo en Asuán (10^8 m^3)")
+descripcion(x, "Nile", d)
+```
+
+La serie mide el caudal anual del Nilo en Asuán. La documentación de `help(Nile)` la describe «con cambio de nivel
+aparente cerca de 1898».
+
+## Patrón de la serie
+
+```{r}
+#| label: ej2-serie
+graficar_serie(d, "Ejemplo 2. Caudal anual del Nilo en Asuán, 1871-1970")
+```
+
+```{r}
+#| label: ej2-correlograma
+#| fig-height: 6
+cg <- correlograma(d)
+cg$grafico
+```
+
+```{r}
+#| label: ej2-pruebas-serie
+#| results: asis
+n_total <- nrow(d)
+r_1 <- .contraste_rh(cg$acf, n_total, 1)
+pp(r_1, paste0("La autocorrelación en el rezago 1 es ", n4(cg$acf[1]), ", muy por encima de la banda de ±", n4(cg$banda),
+               ": el caudal de un año se parece al del anterior. Es la primera de una cola larga: ",
+               sum(abs(cg$acf) > cg$banda), " de los ", cg$m, " rezagos salen de la banda."))
+r_9 <- .contraste_rh(cg$acf, n_total, 9)
+pp(r_9, paste0("Solo en el rezago 9 la autocorrelación (", n4(cg$acf[9]), ") vuelve a quedar dentro de la banda de ±",
+               n4(cg$banda), ": la memoria dura unos ocho años y se apaga sin llegar a ser permanente. Una autocorrelación ",
+               "que no decae indicaría una tendencia; una que se apaga indica un nivel que se mueve despacio."))
+lb0 <- ljung_box(cg$acf, n_total, cg$m, 0)
+pp(lb0, paste0("Con Q = ", n4(lb0$estadistico), " y ", lb0$gl, " grados de libertad el valor p es ", pv(lb0$valor_p),
+               ": se rechaza con claridad que la serie sea ruido blanco. Hay estructura que un pronóstico puede aprovechar."))
+```
+
+**Lectura del patrón.** El caudal no tiene tendencia sostenida (la recta explica el
+`r n2(100 * cor(seq_len(n_total), d$y)^2)` % de la variación) pero su nivel cambia: el promedio de 1871 a 1898
+es `r n2(mean(d$y[d$fecha < as.Date("1899-01-01")]))` y el de 1899 a 1970 es
+`r n2(mean(d$y[d$fecha >= as.Date("1899-01-01")]))`, una caída de
+`r n2(100 * (1 - mean(d$y[d$fecha >= as.Date("1899-01-01")]) / mean(d$y[d$fecha < as.Date("1899-01-01")])))` % del caudal
+en un solo escalón.
+Ese es el supuesto de la media móvil: un nivel local que puede cambiar, sin pendiente. Una ventana corta se adapta al
+escalón; una larga tarda en reconocerlo. La autocorrelación que decae en unos ocho rezagos es la huella de ese
+nivel que se mueve.
+
+## Partición
+
+```{r}
+#| label: ej2-particion
+h <- min(12, floor(0.2 * n_total)); T_est <- n_total - h
+est <- d[seq_len(T_est), ]; val <- d[T_est + seq_len(h), ]
+```
+
+Con $T = `r n_total`$ y $h = `r h`$, el tramo de estimación va de `r format(est$fecha[1], "%Y")` a
+`r format(est$fecha[T_est], "%Y")` ($T_{est} = `r T_est`$) y el de validación de `r format(val$fecha[1], "%Y")` a
+`r format(val$fecha[h], "%Y")`.
+
+## Optimización de la ventana
+
+La ventana $k$ se elige con `optimizar()` sobre $k = 2, \dots, 12$, minimizando el MSE de un paso dentro del tramo de
+estimación y con origen común en $t = 13$, el primer período en que la ventana de 12 ya pronostica.
+
+```{r}
+#| label: ej2-optimizar
+opt <- optimizar(est$y, "mm")
+opt$grafico
+tab(opt$rejilla, 2)
+```
+
+El óptimo es $k =$ `r opt$optimo$k` con MSE `r n4(opt$optimo$mse)`, calculado sobre `r opt$n_err` errores desde
+$t =$ `r opt$origen`. **El óptimo cae en el borde de la rejilla** (`r opt$en_borde`): $k = 2$ es la ventana más corta
+permitida, así que el mínimo podría estar más allá. Significa que la serie pide reaccionar al último dato: cada
+año pesa mucho en el año siguiente, como dice la autocorrelación de `r n4(cg$acf[1])` en el rezago 1. Además la
+curva es casi plana: entre la mejor y la peor ventana el MSE cambia solo
+`r n2(100 * (max(opt$rejilla$mse) / min(opt$rejilla$mse) - 1))` %, de modo que promediar más años no compra
+precisión. La ventana de dos años queda a un paso del pronóstico ingenuo, que es la de un año.
+
+## Ajuste y medidas
+
+```{r}
+#| label: ej2-ajuste
+fit <- ajustar_mm(est$y, opt$optimo$k)
+pron <- fit$pronosticar(h)
+ref <- rep(est$y[T_est], h)                       # ingenuo: el último valor observado
+m_in <- .medir(est$y, fit$yhat, est$y)            # un paso, dentro del tramo de estimación
+m_val <- .medir(val$y, pron, est$y)               # h pronósticos sobre el tramo de validación
+m_ref <- .medir(val$y, ref, est$y)                # el ingenuo, mismo tramo y mismo h
+tab(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo"))
+```
+
+**El método no supera al ingenuo en MASE**: `r n4(m_val$MASE)` contra `r n4(m_ref$MASE)`, es decir, su error
+absoluto medio en validación (`r n2(m_val$MAD)`) es un `r n2(100 * (m_val$MAD / m_ref$MAD - 1))` % mayor que el del ingenuo
+(`r n2(m_ref$MAD)`). En MSE sí lo mejora, `r n2(m_val$MSE)` contra `r n2(m_ref$MSE)`
+(`r n2(100 * (1 - m_val$MSE / m_ref$MSE))` % menos), lo que sugiere que promediar dos años recorta los errores más
+grandes aunque no los típicos. Las dos
+medidas discrepan y la diferencia en cualquiera de las dos es pequeña frente a la dispersión de la serie
+(desviación estándar `r n2(sd(d$y))`), así que con doce datos de validación no se puede afirmar que uno sea mejor.
+La razón de fondo es la de la sección anterior: con $k = 2$ el método es casi el ingenuo, y el ingenuo ya recoge el
+escalón de nivel de 1898 porque copia el último valor.
+
+## Validación de los errores de un paso
+
+```{r}
+#| label: ej2-validacion
+#| fig-height: 7
+cot <- .cotas("ej02", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+ve$grafico
+```
+
+Son $N = `r ve$n`$ errores de un paso ($k = 2$ deja sin pronóstico a los dos primeros años), con $m = `r ve$correlograma$m`$
+rezagos y banda de ±`r n4(ve$correlograma$banda)`, calculada sobre $N$.
+
+```{r}
+#| label: ej2-pruebas-errores
+#| results: asis
+pp(ve$t_media, paste0("El error medio de un paso es ", n4(mean(ve$e)), " sobre una desviación de ", n4(sd(ve$e)),
+                      ": no se distingue de cero, así que la media móvil no sobrestima ni subestima en promedio dentro de la muestra."))
+pp(ve$ljung_box, paste0("Con Q = ", n4(ve$ljung_box$estadistico), " y ", ve$ljung_box$gl, " grados de libertad (m = ",
+                        ve$correlograma$m, ", p = 1 porque se estimó k) no se rechaza que los errores sean incorrelacionados en conjunto. ",
+                        "El rezago 2 sí sale de la banda (r_2 = ", n4(ve$correlograma$acf[2]), ", banda ±", n4(ve$correlograma$banda),
+                        "), pero es lo que produce por construcción una ventana de dos datos: el dato de un año entra con peso 1 en su ",
+                        "propio error y con peso −1/2 en el error de dos años después, lo que induce una correlación negativa en el rezago 2 ",
+                        "(−1/3 si la serie fuera ruido blanco alrededor de un nivel) sin que haya estructura sin modelar."))
+pp(ve$jarque_bera, paste0("JB = ", n4(ve$jarque_bera$estadistico), " con asimetría ", n4(ve$jarque_bera$A), " y curtosis ",
+                          n4(ve$jarque_bera$K), ", muy cerca de 0 y 3: no hay evidencia contra la normalidad de los errores, lo que ",
+                          "respalda las pruebas t y de Ljung–Box de esta sección."))
+pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " supera d_U = ", n2(cot$dU), " (N = ", ve$n,
+                            ", k' = 1): no se rechaza la ausencia de autocorrelación positiva de orden uno, lo que concuerda con ",
+                            "r_1 = ", n4(ve$correlograma$acf[1]), "."))
+```
+
+## Gráfico final
+
+```{r}
+#| label: ej2-final
+.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 2. Media móvil: ajuste y pronóstico")
+```
+
+## Conclusión
+
+Se ajustó una media móvil con la ventana $k =$ `r opt$optimo$k` elegida por `optimizar()` (MSE de un paso
+`r n4(opt$optimo$mse)`, en el borde de la rejilla) sobre los `r T_est` años de estimación. Dentro de la muestra el
+MSE de un paso es `r n4(m_in$MSE)`, el MAD `r n4(m_in$MAD)` y el MASE `r n4(m_in$MASE)` sobre `r m_in$N` errores. En los
+`r h` años de validación el MSE es `r n4(m_val$MSE)`, el MAD `r n4(m_val$MAD)` y el MASE `r n4(m_val$MASE)`, frente a
+`r n4(m_ref$MSE)`, `r n4(m_ref$MAD)` y `r n4(m_ref$MASE)` del ingenuo: **la media móvil no supera al ingenuo en MASE ni en MAD** y
+lo mejora solo en MSE. La razón es que con $k = 2$ el método es casi el ingenuo y la serie es tan ruidosa (desviación
+estándar `r n2(sd(d$y))`) que ninguna ventana mejora de forma apreciable: el MSE varía
+`r n2(100 * (max(opt$rejilla$mse) / min(opt$rejilla$mse) - 1))` % entre las ventanas de la rejilla. La validación de
+errores es limpia: error medio nulo (valor p `r pv(ve$t_media$valor_p)`), sin autocorrelación conjunta (Ljung–Box,
+valor p `r pv(ve$ljung_box$valor_p)`), normales (Jarque–Bera, valor p `r pv(ve$jarque_bera$valor_p)`) y sin
+autocorrelación de orden uno (Durbin–Watson `r n4(ve$durbin_watson$estadistico)` frente a $d_U =$ `r n2(cot$dU)`).
+
+## Recomendación
+
+El pronóstico le sirve a quien necesite un orden de magnitud del caudal del año siguiente, por ejemplo para una
+primera planeación de uso del agua. Como es una línea plana, solo tiene sentido a horizonte de uno a tres años, y aun
+entonces no aporta frente a repetir el último dato. El límite es la precisión: en los `r h` años de validación el error
+absoluto máximo fue de `r n2(max(abs(val$y - pron)))` (`r n2(100 * max(abs(val$y - pron)) / pron[1])` % del valor
+pronosticado de `r n2(pron[1])`) y el error absoluto medio de `r n2(m_val$MAD)`, un `r n2(100 * m_val$MAD / pron[1])` %. Para
+mejorar sobre el ingenuo hace falta un método que pondere los datos con pesos decrecientes en vez de iguales, como el
+suavizamiento exponencial simple del ejemplo siguiente.
