@@ -452,3 +452,47 @@ for (p in list(ve$t_media, ve$ljung_box, ve$jarque_bera, ve$durbin_watson)) .lin
 .guardar_fig(.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 8. Holt: ajuste y pronóstico"),
              "ej08-holt-austres-pronostico.png")
 resumen[[8]] <- .fila_resumen(8, "austres", fit, m_val, m_ref)
+
+# ======================================================================================
+# Ejemplo 9 (contraejemplo). SES sobre AirPassengers: tendencia y estacionalidad
+# ======================================================================================
+cat("\n== Contraejemplo: suavizamiento exponencial simple sobre AirPassengers ==\n")
+d <- leer_serie(AirPassengers,
+                fuente = "Box GEP, Jenkins GM, Reinsel GC (1994). Time Series Analysis: Forecasting and Control, 3rd ed. Prentice Hall (paquete datasets, AirPassengers)",
+                unidad = "Pasajeros de aerolíneas internacionales (miles)")
+s <- attr(d, "frecuencia")
+n_total <- nrow(d); h <- min(12, floor(0.2 * n_total)); T_est <- n_total - h
+est <- d[seq_len(T_est), ]; val <- d[T_est + seq_len(h), ]
+cat(sprintf("T = %d, h = %d, T_est = %d, s = %d; corte entre %s y %s\n", n_total, h, T_est, s, d$fecha[T_est], d$fecha[T_est + 1]))
+.guardar_fig(graficar_serie(d, "Contraejemplo. Pasajeros de aerolíneas internacionales, 1949-1960"), "ej09-contraejemplo-ses-airpassengers-serie.png")
+cg <- correlograma(d)
+.guardar_fig(cg$grafico, "ej09-contraejemplo-ses-airpassengers-correlograma.png", alto = 6)
+.linea(ljung_box(cg$acf, n_total, cg$m, 0))
+
+opt <- optimizar(est$y, "ses")
+cat(sprintf("Óptimo: alpha = %s (MSE = %s); en el borde de la rejilla: %s\n", format(opt$optimo$alpha),
+            .fmt_num(opt$optimo$mse), opt$en_borde))
+.guardar_fig(opt$grafico, "ej09-contraejemplo-ses-airpassengers-optimizacion.png")
+fit <- ajustar_ses(est$y, opt$optimo$alpha)
+pron <- fit$pronosticar(h); ref <- rep(tail(est$y, s), length.out = h)   # ingenuo estacional
+m_in <- .medir(est$y, fit$yhat, est$y, s); m_val <- .medir(val$y, pron, est$y, s); m_ref <- .medir(val$y, ref, est$y, s)
+print(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo estacional"), digits = 5, row.names = FALSE)
+cot <- .cotas("ej09", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+cat(sprintf("Validación de errores (N = %d):\n", ve$n))
+for (p in list(ve$t_media, ve$ljung_box, ve$jarque_bera, ve$durbin_watson)) .linea(p)
+cat(sprintf("Autocorrelación de los errores en h = %d: r_%d = %s (banda ±%s)\n", s, s,
+            .fmt_num(ve$correlograma$acf[s]), .fmt_num(ve$correlograma$banda)))
+.guardar_fig(ve$grafico, "ej09-contraejemplo-ses-airpassengers-errores.png", alto = 7)
+.guardar_fig(.grafico_pronostico(d, fit$yhat, pron, ref, "Contraejemplo. SES: ajuste y pronóstico", nombre_referente = "Referente ingenuo estacional"),
+             "ej09-contraejemplo-ses-airpassengers-pronostico.png")
+resumen[[9]] <- .fila_resumen("C", "AirPassengers", fit, m_val, m_ref)
+
+# ======================================================================================
+# Cierre
+# ======================================================================================
+cat("\n== Resumen: MASE en el tramo de validación (método frente a su referente) ==\n")
+print(do.call(rbind, resumen), digits = 4, row.names = FALSE)
+
+writeLines(capture.output(sessionInfo()), "sesion-info.txt")
+cat(sprintf("\nTiempo total de ejecución: %.1f segundos\n", (proc.time() - t_inicio)[["elapsed"]]))
