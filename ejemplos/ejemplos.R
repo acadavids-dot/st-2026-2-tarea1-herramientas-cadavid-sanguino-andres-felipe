@@ -378,3 +378,45 @@ for (p in list(ve$t_media, ve$ljung_box, ve$jarque_bera, ve$durbin_watson)) .lin
 .guardar_fig(.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 6. Tendencia cuadrática: ajuste y pronóstico"),
              "ej06-tendencia-cuadratica-airmiles-pronostico.png")
 resumen[[6]] <- .fila_resumen(6, "airmiles", fit, m_val, m_ref)
+
+# ======================================================================================
+# Ejemplo 7. Tendencia exponencial sobre JohnsonJohnson (serie trimestral: s = 4)
+# ======================================================================================
+cat("\n== Ejemplo 7: tendencia exponencial sobre JohnsonJohnson ==\n")
+d <- leer_serie(JohnsonJohnson,
+                fuente = "Shumway RH, Stoffer DS (2000). Time Series Analysis and its Applications. Springer, Example 1.1 (paquete datasets, JohnsonJohnson)",
+                unidad = "Ganancia trimestral por acción de Johnson & Johnson (dólares)")
+s <- attr(d, "frecuencia")   # la serie es estacional: MASE y referente con período s
+n_total <- nrow(d); h <- min(12, floor(0.2 * n_total)); T_est <- n_total - h
+est <- d[seq_len(T_est), ]; val <- d[T_est + seq_len(h), ]
+cat(sprintf("T = %d, h = %d, T_est = %d, s = %d; corte entre %s y %s\n", n_total, h, T_est, s, d$fecha[T_est], d$fecha[T_est + 1]))
+.guardar_fig(graficar_serie(d, "Ejemplo 7. Ganancia trimestral por acción de Johnson & Johnson, 1960-1980"), "ej07-tendencia-exponencial-johnsonjohnson-serie.png")
+cg <- correlograma(d)
+.guardar_fig(cg$grafico, "ej07-tendencia-exponencial-johnsonjohnson-correlograma.png", alto = 6)
+.linea(ljung_box(cg$acf, n_total, cg$m, 0))
+
+fit <- ajustar_tendencia(est$y, "exponencial")
+print(as.data.frame(fit$parametros$tabla), digits = 5)
+cat(sprintf("Escala original: beta0 = %s, beta1 = %s (tasa por trimestre = %s)\n", .fmt_num(fit$parametros$coef_exp[[1]]),
+            .fmt_num(fit$parametros$coef_exp[[2]]), .fmt_num(fit$parametros$coef_exp[[2]] - 1)))
+cat(sprintf("R2 (en logaritmos) = %s, sigma2_ln = %s, DW de los residuos = %s, L (HAC) = %d\n", .fmt_num(fit$parametros$r2),
+            .fmt_num(fit$parametros$sigma2), .fmt_num(fit$parametros$dw), fit$parametros$L))
+.guardar_fig(.grafico_residuos_ajustados(log(est$y) - fit$parametros$residuos, fit$parametros$residuos,
+                                         "Ejemplo 7. Residuos contra valores ajustados (logaritmos)"),
+             "ej07-tendencia-exponencial-johnsonjohnson-residuos.png")
+pron <- fit$pronosticar(h); ref <- rep(tail(est$y, s), length.out = h)   # ingenuo estacional: último ciclo repetido
+m_in <- .medir(est$y, fit$yhat, est$y, s); m_val <- .medir(val$y, pron, est$y, s); m_ref <- .medir(val$y, ref, est$y, s)
+print(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo estacional"), digits = 5, row.names = FALSE)
+# Efecto de la corrección de sesgo (mediana frente a media condicional), solo informativo
+fit_c <- ajustar_tendencia(est$y, "exponencial", corregir_sesgo = TRUE)
+m_c <- .medir(val$y, fit_c$pronosticar(h), est$y, s)
+cat(sprintf("Con corregir_sesgo = TRUE (factor %s): MSE de validación %s frente a %s sin corregir\n",
+            .fmt_num(fit_c$parametros$factor_sesgo), .fmt_num(m_c$MSE), .fmt_num(m_val$MSE)))
+cot <- .cotas("ej07", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+cat(sprintf("Validación de errores (N = %d):\n", ve$n))
+for (p in list(ve$t_media, ve$ljung_box, ve$jarque_bera, ve$durbin_watson)) .linea(p)
+.guardar_fig(ve$grafico, "ej07-tendencia-exponencial-johnsonjohnson-errores.png", alto = 7)
+.guardar_fig(.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 7. Tendencia exponencial: ajuste y pronóstico", nombre_referente = "Referente ingenuo estacional"),
+             "ej07-tendencia-exponencial-johnsonjohnson-pronostico.png")
+resumen[[7]] <- .fila_resumen(7, "JohnsonJohnson", fit, m_val, m_ref)
