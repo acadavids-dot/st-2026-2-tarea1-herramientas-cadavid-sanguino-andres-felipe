@@ -76,9 +76,79 @@ graficar_serie <- function(datos, titulo) {
     ggplot2::labs(
       title   = titulo,
       x       = if (attr(datos, "frecuencia") == 1) "Año" else "Fecha",
-      y       = attr(datos, "unidad"),
+      y       = paste(strwrap(attr(datos, "unidad"), width = 40), collapse = "
+"),  # unidades largas: varias líneas
       caption = pie
     ) +
+    .tema_tarea()
+}
+
+# ---- Gráfico final de cada ejemplo ------------------------------------------------------
+
+# Gráfico final del protocolo (enunciado 4(a)): la serie completa, el ajuste dentro de la
+# muestra (yhat sobre el tramo de estimación) y los h pronósticos sobre el tramo de
+# validación, con una línea vertical en el corte. Si se da `referente` (el ingenuo, o el
+# ingenuo estacional) se dibuja también sobre el tramo de validación para poder compararlo.
+#   datos    tibble de leer_serie() con la serie COMPLETA (estimación + validación)
+#   yhat_est yhat del método sobre el tramo de estimación (largo T_est; NA en el calentamiento)
+#   pron     los h pronósticos extramuestrales (largo h = nrow(datos) - T_est)
+#   referente  pronósticos del referente sobre el tramo de validación (largo h) o NULL
+#   nombre_referente  rótulo de la leyenda: «Referente ingenuo» o «Referente ingenuo estacional»
+# La línea del corte queda a mitad de camino entre la última fecha de estimación y la
+# primera de validación, así no coincide con ningún dato.
+.grafico_pronostico <- function(datos, yhat_est, pron, referente = NULL, titulo,
+                                  nombre_referente = "Referente ingenuo") {
+  n <- nrow(datos)
+  h <- length(pron)
+  T_est <- n - h
+  stopifnot(
+    "yhat_est debe tener un valor por cada observación del tramo de estimación" = length(yhat_est) == T_est,
+    "referente debe tener el mismo largo que pron" = is.null(referente) || length(referente) == h,
+    "h debe ser al menos 1" = h >= 1L
+  )
+  f <- datos$fecha
+  obs <- "Serie observada"; aju <- "Ajuste dentro de la muestra"
+  pro <- "Pronóstico"; ref <- nombre_referente
+  df <- rbind(
+    data.frame(fecha = f, valor = datos$y, tipo = obs),
+    data.frame(fecha = f[seq_len(T_est)], valor = yhat_est, tipo = aju),
+    data.frame(fecha = f[T_est + seq_len(h)], valor = pron, tipo = pro)
+  )
+  if (!is.null(referente)) {
+    df <- rbind(df, data.frame(fecha = f[T_est + seq_len(h)], valor = referente, tipo = ref))
+  }
+  df <- df[!is.na(df$valor), ]
+  df$tipo <- factor(df$tipo, levels = c(obs, aju, pro, ref))
+  corte <- as.Date(mean(as.numeric(f[c(T_est, T_est + 1L)])))
+
+  graficar_serie(datos, titulo) +
+    ggplot2::geom_vline(xintercept = corte, linetype = "dotted", colour = "grey30") +
+    ggplot2::geom_line(data = df, ggplot2::aes(x = fecha, y = valor, colour = tipo,
+                                               linetype = tipo), linewidth = 0.6) +
+    ggplot2::geom_point(data = df[df$tipo == pro, ], ggplot2::aes(x = fecha, y = valor,
+                                                                  colour = tipo), size = 1.6) +
+    ggplot2::scale_colour_manual(
+      values = stats::setNames(c("#1F4E79", "#E08E0B", "#B03A2E", "grey45"), c(obs, aju, pro, ref)),
+      name = NULL, drop = FALSE) +
+    ggplot2::scale_linetype_manual(
+      values = stats::setNames(c("solid", "solid", "solid", "dashed"), c(obs, aju, pro, ref)),
+      name = NULL, drop = FALSE) +
+    ggplot2::annotate("text", x = corte, y = Inf, label = " validación →", hjust = 0,
+                      vjust = 1.6, size = 3, colour = "grey30") +
+    ggplot2::theme(legend.position = "bottom")
+}
+
+# Residuos contra valores ajustados de una tendencia (enunciado 4(a), supuesto de varianza
+# constante): una nube sin forma alrededor de cero apoya la varianza constante; un abanico o
+# una curva la contradicen. Ambos ejes están en la escala de la regresión (en la exponencial,
+# logaritmos), que es donde valen los supuestos.
+.grafico_residuos_ajustados <- function(ajustado, residuos, titulo) {
+  stopifnot("ajustado y residuos deben tener el mismo largo" = length(ajustado) == length(residuos))
+  ggplot2::ggplot(data.frame(a = ajustado, r = residuos), ggplot2::aes(x = a, y = r)) +
+    ggplot2::geom_hline(yintercept = 0, colour = "grey40") +
+    ggplot2::geom_point(colour = "#1F4E79", size = 1.8) +
+    ggplot2::labs(title = titulo, x = "Valores ajustados (escala de la regresión)",
+                  y = "Residuos") +
     .tema_tarea()
 }
 
