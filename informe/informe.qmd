@@ -1,0 +1,16 @@
+---
+title: "Tarea 1 — Caja de herramientas de pronóstico"
+author: "Pendiente"
+date: today
+lang: es
+format:
+  html:
+    toc: true
+    number-sections: true
+    code-fold: false
+    embed-resources: true
+    df-print: kable
+execute:
+  echo: true
+  warning: true
+---
