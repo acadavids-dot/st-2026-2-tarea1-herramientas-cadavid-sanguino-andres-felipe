@@ -81,3 +81,106 @@ graficar_serie <- function(datos, titulo) {
     ) +
     .tema_tarea()
 }
+
+# ---- correlograma ---------------------------------------------------------------------
+
+# Un panel del correlograma: barras verticales desde cero para los rezagos 1, ..., m
+# (el rezago 0 no se dibuja) y la banda como dos líneas discontinuas en ±banda. Se fuerza
+# que el eje y incluya la banda aunque todas las barras queden dentro de ella.
+.panel_correlograma <- function(valores, banda, titulo, etiqueta_y) {
+  df <- data.frame(h = seq_along(valores), v = valores)
+  ggplot2::ggplot(df, ggplot2::aes(x = h, y = v)) +
+    ggplot2::geom_hline(yintercept = 0, colour = "grey40") +
+    ggplot2::geom_segment(ggplot2::aes(xend = h, yend = 0), colour = "#1F4E79",
+                          linewidth = 0.8) +
+    ggplot2::geom_hline(yintercept = c(-banda, banda), linetype = "dashed",
+                        colour = "#B03A2E") +
+    ggplot2::scale_x_continuous(breaks = function(lim) {
+      marcas <- pretty(lim)
+      marcas[marcas >= 1]  # sin marca en el rezago 0
+    }) +
+    ggplot2::expand_limits(y = c(-banda, banda)) +
+    ggplot2::labs(title = titulo, x = "Rezago h", y = etiqueta_y) +
+    .tema_tarea()
+}
+
+#' correlograma(datos, m)
+#'
+#' Descripción: correlograma de una serie, o de los errores de un método, en un panel de
+#'   dos gráficos (ACF arriba, PACF abajo).
+#'
+#' Ecuaciones:
+#'   ACF muestral a mano, con divisor único T (Definición 9 de la Clase 3):
+#'     r_h = sum_{t=h+1}^{n} (y_t - ybar)(y_{t-h} - ybar) / sum_{t=1}^{n} (y_t - ybar)^2,
+#'     h = 1, ..., m.
+#'   El numerador tiene n - h sumandos y el denominador n, por lo que r_h queda sesgada
+#'   hacia cero; se prefiere porque garantiza una matriz de autocorrelaciones semidefinida
+#'   positiva (Clase 3).
+#'   PACF: pacf(y, lag.max = m, plot = FALSE)$acf, de stats.
+#'   Banda: la misma línea que dibuja plot.acf (método de stats), clim0 <- qnorm((1 + ci)/2)/sqrt(x$n.used)
+#'   con ci = 0.95, es decir +/- qnorm(0.975)/sqrt(n) ~ 1.96/sqrt(n). No es un estadístico:
+#'   es el intervalo de la distribución asintótica de r_h bajo ruido blanco (Bartlett),
+#'   r_h ~ N(0, 1/n). Se dibuja igual en los dos paneles.
+#'
+#' Sobre n: es el número de valores de la sucesión que se grafica, no el T de la serie
+#'   original. Con errores de un método, los NA del calentamiento se eliminan y n es el
+#'   número de errores que quedan; la ACF, la PACF y la banda se calculan sobre esos n.
+#'   Los NA solo pueden estar al inicio (calentamiento): quitar NA del medio cambiaría
+#'   qué observaciones están a h períodos de distancia, por eso se rechazan.
+#'
+#' @param datos  tibble de leer_serie() (se usa la columna `y`) o vector numérico.
+#' @param m      número de rezagos (entero, 1 <= m < n). Por defecto min(floor(n / 4), 24).
+#' @return lista con `acf` (vector r_h, h = 1..m), `pacf` (vector, h = 1..m), `banda`
+#'   (semiancho), `n`, `m` y `grafico` (panel patchwork, subtítulo con n y m).
+#'
+#' Referencia: enunciado, sección 2(c); Clase 3, Parte II.
+correlograma <- function(datos, m = NULL) {
+  y <- if (is.data.frame(datos)) datos$y else datos
+  stopifnot("datos debe ser el tibble de leer_serie() o un vector numérico" =
+              is.numeric(y) && length(y) > 0L)
+  y <- as.numeric(y)
+
+  valido <- !is.na(y)
+  stopifnot("y no puede ser todo NA" = any(valido))
+  primero <- which(valido)[1]
+  stopifnot("los NA solo pueden estar al inicio (calentamiento), no entre los valores" =
+              all(valido[primero:length(y)]))
+  y <- y[primero:length(y)]
+  n <- length(y)
+
+  if (is.null(m)) {
+    m <- min(floor(n / 4), 24)
+  }
+  stopifnot(
+    "m debe ser un entero positivo menor que el número de observaciones sin NA" =
+      is.numeric(m) && length(m) == 1L && !is.na(m) && m >= 1 && m == floor(m) && m < n,
+    "la serie es constante: la ACF no está definida" = sum((y - mean(y))^2) > 0
+  )
+
+  # ACF a mano, divisor único: el denominador suma los n cuadrados y cada numerador
+  # suma los n - h productos disponibles.
+  yc <- y - mean(y)
+  den <- sum(yc^2)
+  r <- vapply(seq_len(m), function(h) sum(yc[(h + 1):n] * yc[1:(n - h)]) / den, numeric(1))
+
+  # PACF: la única llamada a stats permitida para esto (pacf con plot = FALSE).
+  p <- as.numeric(stats::pacf(y, lag.max = m, plot = FALSE)$acf)
+
+  banda <- stats::qnorm((1 + 0.95) / 2) / sqrt(n)
+
+  grafico <- patchwork::wrap_plots(
+    .panel_correlograma(r, banda, "Autocorrelación muestral (ACF)", "r_h"),
+    .panel_correlograma(p, banda, "Autocorrelación parcial (PACF)", "PACF"),
+    ncol = 1
+  ) +
+    patchwork::plot_annotation(
+      title = "Correlograma",
+      subtitle = sprintf(
+        "n = %d observaciones, m = %d rezagos. Líneas discontinuas: banda de ruido blanco al 95 %% (±%s)",
+        n, as.integer(m), formatC(banda, format = "f", digits = 4, decimal.mark = ",")
+      ),
+      theme = .tema_tarea()
+    )
+
+  list(acf = r, pacf = p, banda = banda, n = n, m = as.integer(m), grafico = grafico)
+}
