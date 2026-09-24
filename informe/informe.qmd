@@ -1,6 +1,6 @@
 ---
 title: "Tarea 1 — Caja de herramientas de pronóstico"
-author: "Pendiente"
+author: "Andrés Felipe Cadavid Sanguino"
 date: today
 lang: es
 format:
