@@ -115,3 +115,46 @@ ajustar_media <- function(y) {
     n_param = 0L
   )
 }
+
+# ---- ajustar_mm -----------------------------------------------------------------------
+
+#' ajustar_mm(y, k)
+#'
+#' Descripción: pronóstico con la media móvil de orden k, el promedio de los k datos más
+#'   recientes (nivel local). Es el método para una serie con nivel que cambia despacio.
+#'
+#' Ecuaciones:
+#'   MM_t(k) = (1/k) sum_{i=0}^{k-1} Y_{t-i},   Yhat_{t+1} = MM_t(k)  para t >= k.
+#'   Un solo recorrido con la forma recursiva (Proposición de la Clase 3):
+#'   MM_t = MM_{t-1} + (Y_t - Y_{t-k}) / k. La primera media se calcula una sola vez.
+#'
+#' Inicialización: MM_k = (Y_1 + ... + Y_k) / k.
+#' Calentamiento: yhat[1:k] = NA; el primer pronóstico es yhat[k + 1] = MM_k.
+#' Pronóstico extramuestral: rep(MM_T, h).
+#'
+#' @param y  vector numérico ordenado, sin NA.
+#' @param k  ventana: entero con 2 <= k <= length(y).
+#' @return objeto de clase "metodo_pronostico". En parametros: k, mm (trayectoria MM_t,
+#'   con NA para t < k) y ultima (MM_T). n_param = 1 (se estima k).
+#'
+#' Referencia: Clase 3, medias móviles y su forma recursiva.
+ajustar_mm <- function(y, k) {
+  y <- .validar_serie(y)
+  stopifnot("k debe ser un entero mayor o igual a 2" = .es_entero(k, 2))
+  n <- length(y)
+  stopifnot("k no puede superar length(y)" = k <= n)
+
+  mm <- rep(NA_real_, n)
+  mm[k] <- sum(y[1:k]) / k
+  for (t in seq_len(n - k) + k) {          # vacío si k == n
+    mm[t] <- mm[t - 1L] + (y[t] - y[t - k]) / k
+  }
+  yhat <- c(NA_real_, mm[-n])              # yhat[t] = MM_{t-1}: NA para t <= k
+
+  .nuevo_metodo(
+    metodo = sprintf("Media móvil (k = %d)", as.integer(k)), y = y, yhat = yhat,
+    pronosticar = .pronosticador_constante(mm[n]),
+    parametros = list(k = k, mm = mm, ultima = mm[n]),
+    n_param = 1L
+  )
+}
