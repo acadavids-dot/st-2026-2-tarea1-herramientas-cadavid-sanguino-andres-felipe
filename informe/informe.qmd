@@ -1389,3 +1389,265 @@ extrapolación de una parábola: crece sin freno y el pronóstico a $h = `r h`$ 
 error de mayor tamaño se dio en el horizonte más largo. Con `r h` datos de validación y una serie que se aplanó
 (`r n2(val$y[1])` y `r n2(val$y[2])` en los dos primeros años de validación, casi iguales) no hay base para usarla a más de dos años,
 y cualquier uso debería reestimarse cada año.
+
+# Ejemplo 7. Tendencia exponencial sobre `JohnsonJohnson`
+
+## Descripción de la serie
+
+```{r}
+#| label: ej7-datos
+x <- JohnsonJohnson
+d <- leer_serie(x,
+                fuente = "Shumway RH, Stoffer DS (2000). Time Series Analysis and its Applications. Springer, Example 1.1 (paquete datasets, JohnsonJohnson)",
+                unidad = "Ganancia trimestral por acción de Johnson & Johnson (dólares)")
+s <- attr(d, "frecuencia")   # la serie es trimestral: el MASE y el ingenuo de referencia usan el período s
+descripcion(x, "JohnsonJohnson", d)
+```
+
+La serie es trimestral, así que es **estacional** (período $s = `r s`$), y ese es el rasgo que este método no modela. Se elige
+de todos modos por su tendencia: la ganancia por acción crece a una tasa casi constante, que es el supuesto de la tendencia
+exponencial. Como la serie es estacional, el referente de comparación es el ingenuo estacional (el último ciclo repetido) y el MASE se
+escala con el ingenuo de período $s$. La sección de validación y la recomendación miden cuánto cuesta ignorar la
+estacionalidad.
+
+## Patrón de la serie
+
+```{r}
+#| label: ej7-serie
+graficar_serie(d, "Ejemplo 7. Ganancia trimestral por acción de Johnson & Johnson, 1960-1980")
+```
+
+```{r}
+#| label: ej7-correlograma
+#| fig-height: 6
+cg <- correlograma(d)
+cg$grafico
+```
+
+```{r}
+#| label: ej7-pruebas-serie
+#| results: asis
+n_total <- nrow(d)
+r_1 <- .contraste_rh(cg$acf, n_total, 1)
+pp(r_1, paste0("r_1 = ", n4(cg$acf[1]), ", casi 1, frente a una banda de ±", n4(cg$banda), ": cada trimestre repite casi entero al anterior, ",
+               "como en una serie dominada por una tendencia creciente."))
+r_s <- .contraste_rh(cg$acf, n_total, s)
+pp(r_s, paste0("En el rezago estacional h = ", s, " la autocorrelación vale ", n4(cg$acf[s]), ", significativa, pero no hay un pico sobre sus ",
+               "vecinos (", n4(cg$acf[s - 1]), " en h = ", s - 1, " y ", n4(cg$acf[s + 1]), " en h = ", s + 1, "): la ACF de la serie original no deja ver la ",
+               "estacionalidad porque la tendencia domina todos los rezagos. Se buscará en los errores, donde la tendencia ya no está."))
+lb0 <- ljung_box(cg$acf, n_total, cg$m, 0)
+pp(lb0, paste0("Q = ", n4(lb0$estadistico), " con ", lb0$gl, " grados de libertad y valor p ", pv(lb0$valor_p),
+               ": los ", cg$m, " rezagos salen de la banda y la serie no es ruido blanco."))
+```
+
+**Lectura del patrón.** La serie crece de forma acelerada: el promedio de la primera mitad es `r n2(mean(d$y[1:42]))` y el de la
+segunda `r n2(mean(d$y[43:84]))`. La aceleración es la de un crecimiento porcentual estable, no la de una parábola: en logaritmos
+el crecimiento es casi una recta, con una pendiente que apenas cambia de una mitad a otra.
+
+```{r}
+#| label: ej7-tasa
+z <- log(d$y); ti <- seq_len(n_total)
+pend <- function(i) cov(ti[i], z[i]) / var(ti[i])   # pendiente de mínimos cuadrados de ln y sobre t
+p_1 <- pend(1:42); p_2 <- pend(43:84)
+```
+
+La pendiente del logaritmo es `r n4(p_1)` en la primera mitad y `r n4(p_2)` en la segunda, es decir, una tasa de crecimiento de
+`r n2(100 * (exp(p_1) - 1))` % y `r n2(100 * (exp(p_2) - 1))` % por trimestre. Esa estabilidad de la tasa es el supuesto de la
+tendencia exponencial $Y_t = \beta_0 \beta_1^{\,t}$ (o $\ln Y_t = a + \theta t$). Contrasta con `airmiles` (ejemplo 6), donde
+la tasa cae a casi la mitad entre mitades.
+
+## Partición
+
+```{r}
+#| label: ej7-particion
+h <- min(12, floor(0.2 * n_total)); T_est <- n_total - h
+est <- d[seq_len(T_est), ]; val <- d[T_est + seq_len(h), ]
+```
+
+Con $T = `r n_total`$ y $h = \min\{12, \lfloor 0{,}2 \cdot `r n_total`\rfloor\} = `r h`$ (tres años, que cubre `r h / s` ciclos completos), el tramo
+de estimación va de `r format(est$fecha[1])` a `r format(est$fecha[T_est])` ($T_{est} = `r T_est`$) y el de validación de
+`r format(val$fecha[1])` a `r format(val$fecha[h])`.
+
+## Ajuste y medidas
+
+La tendencia exponencial no tiene constantes por elegir (los coeficientes salen de las ecuaciones normales sobre
+$\ln Y_t$), así que no se usa `optimizar()`. El pronóstico $e^{\hat a + \hat\theta t}$ estima la **mediana** condicional y no la
+media; más abajo se mide el efecto de la corrección de sesgo. Los `yhat` son valores ajustados de una regresión que usa todo
+el tramo de estimación.
+
+```{r}
+#| label: ej7-ajuste
+fit <- ajustar_tendencia(est$y, "exponencial")
+p <- fit$parametros
+pron <- fit$pronosticar(h)
+ref <- rep(tail(est$y, s), length.out = h)        # ingenuo estacional: el último ciclo repetido
+m_in <- .medir(est$y, fit$yhat, est$y, s)         # ajuste dentro del tramo de estimación
+m_val <- .medir(val$y, pron, est$y, s)            # h pronósticos sobre el tramo de validación
+m_ref <- .medir(val$y, ref, est$y, s)             # el ingenuo estacional, mismo tramo y mismo h
+tab(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo estacional"))
+fit_c <- ajustar_tendencia(est$y, "exponencial", corregir_sesgo = TRUE)   # con la corrección de sesgo
+m_c <- .medir(val$y, fit_c$pronosticar(h), est$y, s)
+e_m <- val$y - pron; e_r <- val$y - ref           # errores de validación del método y del referente
+```
+
+En escala original el modelo es $\hat Y_t = `r n4(p$coef_exp[[1]])` \cdot `r n4(p$coef_exp[[2]])`^{\,t}$: un nivel de
+`r n2(p$coef_exp[[1]])` dólares en $t = 0$ y un crecimiento de `r n2(100 * (p$coef_exp[[2]] - 1))` % por trimestre. El
+método supera al ingenuo estacional en validación: MASE `r n4(m_val$MASE)` contra `r n4(m_ref$MASE)`, MSE `r n2(m_val$MSE)`
+contra `r n2(m_ref$MSE)` (`r n2(100 * (1 - m_val$MSE / m_ref$MSE))` % menos) y MAPE `r n2(m_val$MAPE)` % contra
+`r n2(m_ref$MAPE)` %. El MASE es mayor que uno en las dos filas de validación porque se escala con el error del ingenuo estacional de un
+ciclo dentro de la muestra (`r n4(attr(m_in, "escala_mase"))`), muy pequeño en una serie que crece despacio; lo que corresponde comparar
+es la última fila.
+
+**Corrección de sesgo.** Multiplicar por $e^{\hat\sigma^2_{ln}/2} =$ `r n4(fit_c$parametros$factor_sesgo)` no ayuda en
+validación: el MSE pasa de `r n2(m_val$MSE)` a `r n2(m_c$MSE)`. El factor es pequeño (`r n2(100 * (fit_c$parametros$factor_sesgo - 1))` %) porque
+$\hat\sigma^2_{ln} =$ `r n4(p$sigma2)` es pequeña, y en este tramo el pronóstico ya quedó por encima de lo observado, de modo que
+subirlo más solo empeora. Se mantiene el pronóstico sin corregir (la mediana).
+
+## Validación de los errores de un paso
+
+```{r}
+#| label: ej7-validacion
+#| fig-height: 7
+cot <- .cotas("ej07", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+ve$grafico
+```
+
+Son $N = `r ve$n`$ errores, en escala original (dólares), uno por cada observación de estimación, con $m = `r ve$correlograma$m`$ rezagos y
+banda de ±`r n4(ve$correlograma$banda)`, calculada sobre $N$. Son los errores de los valores ajustados; los supuestos de la
+regresión se revisan aparte y en logaritmos, que es la escala donde se estimó.
+
+```{r}
+#| label: ej7-pruebas-errores
+#| results: asis
+pp(ve$t_media, paste0("El error medio es ", n4(mean(ve$e)), " dólares sobre una desviación de ", n4(sd(ve$e)),
+                      ": indistinguible de cero. Como el ajuste se hizo en logaritmos, la media de los errores en escala original no es cero por ",
+                      "construcción, y que resulte tan cercana a cero es un resultado, no un artefacto."))
+pp(ve$ljung_box, paste0("Q = ", n4(ve$ljung_box$estadistico), " con ", ve$ljung_box$gl, " grados de libertad (m = ",
+                        ve$correlograma$m, ", p = 2 porque se estimaron a y theta) y valor p ", pv(ve$ljung_box$valor_p),
+                        ": se rechaza con contundencia. El motivo se ve en la ACF de los errores: r_", s, " = ", n4(ve$correlograma$acf[s]),
+                        " frente a una banda de ±", n4(ve$correlograma$banda), " y r_1 = ", n4(ve$correlograma$acf[1]),
+                        ", mientras que los demás rezagos son pequeños. Es la estacionalidad trimestral, que el método no modela y que ahora, sin ",
+                        "la tendencia, sale a la vista."))
+pp(ve$jarque_bera, paste0("JB = ", n4(ve$jarque_bera$estadistico), " con asimetría ", n4(ve$jarque_bera$A), " y curtosis ",
+                          n4(ve$jarque_bera$K), " (0 y 3 para una normal): los errores en dólares tienen cola izquierda pesada. Los mayores errores negativos ",
+                          "son los de los cuartos trimestres de los últimos años, cuando el nivel y por tanto la caída estacional medida en dólares son ",
+                          "mayores. En logaritmos esto desaparece (ver los supuestos de la regresión)."))
+pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " queda por debajo de d_L = ", n2(cot$dL), " (N = ", ve$n,
+                            ", k' = 1): autocorrelación positiva de orden uno en dólares, con ρ ≈ ", n4(ve$durbin_watson$rho_aprox),
+                            ". En logaritmos el estadístico se acerca a 2 (ver más abajo), lo que sugiere que buena parte de esta autocorrelación viene de ",
+                            "medir en dólares y no de una dependencia real entre trimestres consecutivos."))
+```
+
+## Coeficientes y supuestos de la regresión
+
+La regresión se estima sobre $\ln Y_t = a + \theta t + \varepsilon_t$, así que la tabla, $R^2$, $\hat\sigma^2$, Durbin–Watson y
+residuos están en logaritmos.
+
+```{r}
+#| label: ej7-coeficientes
+tab(tabla_coef(fit))
+```
+
+$R^2 =$ `r n4(p$r2)`, $\hat\sigma^2_{ln} =$ `r n4(p$sigma2)` (entre $T - p =$ `r p$gl` grados de libertad), estadístico de
+Durbin–Watson de los residuos `r n4(p$dw)` y `r p$L` rezagos en el error estándar robusto. Los errores estándar robustos superan a los
+ordinarios en un `r n2(100 * (p$tabla$ee_robusto[1] / p$tabla$ee_ordinario[1] - 1))` % ($a$) y un
+`r n2(100 * (p$tabla$ee_robusto[2] / p$tabla$ee_ordinario[2] - 1))` % ($\theta$): una diferencia modesta, porque la autocorrelación de orden
+uno de los residuos en logaritmos es pequeña. Aun así la decisión se toma con el robusto, que también cubre la autocorrelación en el
+rezago estacional:
+
+```{r}
+#| label: ej7-pruebas-coef
+#| results: asis
+t_a <- .t_coeficiente("a", p$tabla$estimacion[1], p$tabla$ee_robusto[1], p$gl, T_est)
+pp(t_a, paste0("a = ", n4(p$tabla$estimacion[1]), " es el logaritmo del nivel en t = 0, es decir, un nivel de ", n4(p$coef_exp[[1]]),
+               " dólares. Se distingue de cero, pero lo que importa es la tasa: el nivel inicial es solo el punto de partida de la curva."))
+t_th <- .t_coeficiente(r"(\theta)", p$tabla$estimacion[2], p$tabla$ee_robusto[2], p$gl, T_est)
+pp(t_th, paste0("theta = ", n4(p$tabla$estimacion[2]), " es la tasa de crecimiento continua por trimestre (", n2(100 * (p$coef_exp[[2]] - 1)),
+                " % en tasa compuesta). Se rechaza con un estadístico de ", n2(t_th$estadistico), " que la ganancia por acción no tenga tendencia: ",
+                "la tasa es distinta de cero con una evidencia abrumadora."))
+```
+
+Los supuestos se revisan sobre los residuos en logaritmos. Como en las otras tendencias, la media cero es cierta por construcción; se
+comprueban la autocorrelación, la normalidad y la varianza constante.
+
+```{r}
+#| label: ej7-supuestos
+#| fig-height: 7
+ve_log <- validar_errores(p$residuos, fit$n_param, T_est, cot$dL, cot$dU)
+ve_log$grafico
+```
+
+```{r}
+#| label: ej7-pruebas-supuestos
+#| results: asis
+pp(ve_log$ljung_box, paste0("Q = ", n4(ve_log$ljung_box$estadistico), " con ", ve_log$ljung_box$gl, " grados de libertad y valor p ",
+                            pv(ve_log$ljung_box$valor_p), ": se rechaza. La autocorrelación no está en el rezago 1 (r_1 = ",
+                            n4(ve_log$correlograma$acf[1]), ") sino en el estacional, r_", s, " = ", n4(ve_log$correlograma$acf[s]),
+                            " y r_", 2 * s, " = ", n4(ve_log$correlograma$acf[2 * s]), ": los residuos repiten su patrón cada año."))
+pp(ve_log$jarque_bera, paste0("JB = ", n4(ve_log$jarque_bera$estadistico), " con asimetría ", n4(ve_log$jarque_bera$A), " y curtosis ",
+                              n4(ve_log$jarque_bera$K), ": los residuos en logaritmos son prácticamente normales. La log-transformación ",
+                              "estabilizó los errores, lo que respalda usar la escala logarítmica."))
+pp(ve_log$durbin_watson, paste0("d = ", n4(ve_log$durbin_watson$estadistico), " supera d_U = ", n2(cot$dU), " (N = ", ve_log$n,
+                                ", k' = 1): no se rechaza la autocorrelación positiva de orden uno en logaritmos. Confirma que el problema de la ",
+                                "regresión no es la dependencia de un trimestre con el anterior, sino la estacional."))
+```
+
+**Varianza constante.** Se revisa con el gráfico de residuos contra valores ajustados (en logaritmos).
+
+```{r}
+#| label: ej7-residuos
+.grafico_residuos_ajustados(log(est$y) - p$residuos, p$residuos, "Ejemplo 7. Residuos contra valores ajustados (logaritmos)")
+```
+
+La dispersión de los residuos en logaritmos es algo mayor al principio (desviación estándar de
+`r n2(sd(p$residuos[1:36]))` en la primera mitad contra `r n2(sd(p$residuos[37:72]))` en la segunda), pero no hay un abanico
+creciente: en logaritmos la varianza es aproximadamente constante, y esa es la ventaja de la escala logarítmica frente a la
+original, donde los errores crecen con el nivel.
+
+**La estacionalidad, medida.** El efecto medio de cada trimestre sobre los residuos en logaritmos es:
+
+```{r}
+#| label: ej7-estacionalidad
+trimestre <- rep(seq_len(s), length.out = T_est)
+efecto <- as.numeric(tapply(p$residuos, trimestre, mean))
+tab(data.frame(Trimestre = paste0("T", seq_len(s)), `Efecto en logaritmos` = efecto,
+               `Factor sobre la tendencia` = exp(efecto), check.names = FALSE))
+```
+
+El cuarto trimestre queda `r n2(100 * (1 - min(exp(efecto))))` % por debajo de la tendencia y el tercero `r n2(100 * (max(exp(efecto)) - 1))` %
+por encima. La diferencia entre el mejor y el peor trimestre (`r n4(diff(range(efecto)))` en logaritmos) equivale al
+`r n2(100 * diff(range(efecto)) / (p$tabla$estimacion[2] * (T_est - 1)))` % del recorrido total de la tendencia en el tramo de estimación. Es pequeña frente
+a la tendencia y por eso el método sigue siendo útil, pero es lo que las pruebas de errores detectan y lo que limita el pronóstico.
+
+## Gráfico final
+
+```{r}
+#| label: ej7-final
+.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 7. Tendencia exponencial: ajuste y pronóstico",
+                    nombre_referente = "Referente ingenuo estacional")
+```
+
+## Conclusión
+
+Se ajustó una tendencia exponencial $\hat Y_t = `r n4(p$coef_exp[[1]])` \cdot `r n4(p$coef_exp[[2]])`^{\,t}$ sobre los
+`r T_est` trimestres de estimación, con un crecimiento de `r n2(100 * (p$coef_exp[[2]] - 1))` % por trimestre
+($t =$ `r n2(t_th$estadistico)` para $\theta$ con error estándar robusto, valor p `r pv(t_th$valor_p)`) y $R^2 =$ `r n4(p$r2)` en
+logaritmos. Sobre los `r h` trimestres de validación el MSE es `r n4(m_val$MSE)`, el MAD `r n4(m_val$MAD)` y el MASE
+`r n4(m_val$MASE)`, frente a `r n4(m_ref$MSE)`, `r n4(m_ref$MAD)` y `r n4(m_ref$MASE)` del ingenuo estacional: reduce el MSE en
+`r n2(100 * (1 - m_val$MSE / m_ref$MSE))` %. La validación de errores muestra un método que capta la tendencia pero no la
+estacionalidad: Ljung–Box rechaza (valor p `r pv(ve$ljung_box$valor_p)`) por el rezago estacional
+($r_{`r s`} =$ `r n4(ve$correlograma$acf[s])`), Durbin–Watson `r n4(ve$durbin_watson$estadistico)` queda bajo $d_L =$ `r n2(cot$dL)` y
+Jarque–Bera rechaza (valor p `r pv(ve$jarque_bera$valor_p)`) en la escala original, mientras que en logaritmos los residuos son
+normales (valor p `r pv(ve_log$jarque_bera$valor_p)`) y sin autocorrelación de orden uno (Durbin–Watson `r n4(ve_log$durbin_watson$estadistico)`).
+
+## Recomendación
+
+El pronóstico le sirve a quien siga el crecimiento de largo plazo de la ganancia por acción, por ejemplo un analista que quiera la
+trayectoria esperada del año siguiente, y no a quien necesite el valor de un trimestre concreto. El límite es la estacionalidad:
+en validación el método sobrestima el cuarto trimestre de forma sistemática, con un error medio (observado menos pronóstico) de
+`r n2(mean(e_m[seq(s, h, by = s)]))` dólares en esos trimestres (`r paste0(n2(abs(e_m[seq(s, h, by = s)])), collapse = ", ")` en los tres años,
+`r paste0(n2(100 * abs(e_m[seq(s, h, by = s)]) / val$y[seq(s, h, by = s)]), collapse = " %, ")` % del valor observado), frente a
+`r n2(mean(abs(e_m[-seq(s, h, by = s)])))` dólares de error absoluto medio en los demás trimestres. Por eso el horizonte razonable es de un año
+para el nivel anual, con el pronóstico trimestral usado con reserva; para pronosticar cada trimestre haría falta un
+método que modele la estacionalidad (ficticias estacionales o Holt–Winters), que este trabajo no implementa.
