@@ -519,3 +519,58 @@ validar_errores <- function(e, p, T_serie = NULL, dL = NULL, dU = NULL) {
     grafico_errores = g_err, grafico = grafico
   )
 }
+
+# ---- Auxiliares de los ejemplos y del informe ------------------------------------------
+
+# medidas() con el aviso de MAPE indefinido explicado: cuando la serie tiene ceros (es el
+# caso de discoveries) medidas() devuelve MAPE = NA y avisa; aquí ese aviso, y solo ese, se
+# convierte en un mensaje. Cualquier otra advertencia sigue saliendo.
+.medir <- function(y, yhat, y_entrenamiento, s = 1) {
+  withCallingHandlers(
+    medidas(y, yhat, y_entrenamiento, s),
+    warning = function(w) {
+      if (grepl("MAPE no definido", conditionMessage(w), fixed = TRUE)) {
+        message("  [esperado] MAPE no definido: hay ceros entre los datos evaluados; se reporta NA.")
+        invokeRestart("muffleWarning")
+      }
+    }
+  )
+}
+
+# Tabla de medidas de un ejemplo: método dentro de la muestra, método en validación y
+# referente en validación (mismo tramo y mismo h).
+.tabla_medidas <- function(m_in, m_val, m_ref, nombre_ref) {
+  as.data.frame(rbind(
+    cbind(caso = "Método, un paso (estimación)", m_in),
+    cbind(caso = "Método, h pronósticos (validación)", m_val),
+    cbind(caso = paste0(nombre_ref, ", h pronósticos (validación)"), m_ref)
+  ))
+}
+
+# Cotas d_L y d_U de Durbin–Watson al 5 % (una cola) para los N errores de cada ejemplo y
+# k' regresores sin contar el intercepto. Fuente: tabla de Savin y White (1977). La tabla no
+# cubre todos los n (después de 40 solo trae múltiplos de 5), así que se calcularon de forma
+# exacta con la definición de Durbin y Watson (1951) y la integral de Imhof (1961); ese
+# cálculo reproduce 12 filas de la tabla con diferencias de a lo sumo 0,005 (ver README).
+# Se redondean a 2 decimales, como la tabla. Para los métodos de suavizamiento se usa
+# k' = 1 (aproximación declarada: no hay matriz de diseño).
+# La tabla vive dentro de la función (ninguna función lee objetos globales). Devuelve la
+# fila del ejemplo `id` (N, k, dL, dU) y se detiene si el número de errores cambió: las
+# cotas solo valen para ese N.
+.cotas <- function(id, N) {
+  cotas_dw <- list(
+    ej01 = list(N = 87, k = 1, dL = 1.63, dU = 1.67),
+    ej02 = list(N = 86, k = 1, dL = 1.63, dU = 1.67),
+    ej03 = list(N = 87, k = 1, dL = 1.63, dU = 1.67),
+    ej04 = list(N = 74, k = 1, dL = 1.60, dU = 1.65),
+    ej05 = list(N = 86, k = 1, dL = 1.63, dU = 1.67),
+    ej06 = list(N = 20, k = 2, dL = 1.10, dU = 1.54),
+    ej07 = list(N = 72, k = 1, dL = 1.59, dU = 1.65),
+    ej08 = list(N = 76, k = 1, dL = 1.60, dU = 1.65),
+    ej09 = list(N = 131, k = 1, dL = 1.70, dU = 1.73)
+  )
+  fila <- cotas_dw[[id]]
+  stopifnot("no hay cotas de Durbin-Watson para este ejemplo" = !is.null(fila),
+            "el número de errores cambió: recalcular las cotas de Durbin-Watson" = N == fila$N)
+  fila
+}
