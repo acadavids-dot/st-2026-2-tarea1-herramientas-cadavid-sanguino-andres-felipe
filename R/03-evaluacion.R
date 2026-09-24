@@ -135,7 +135,7 @@ jarque_bera <- function(e) {
     nombre = "Prueba de Jarque–Bera",
     H0 = r"($H_0:\ A = 0\ \text{y}\ K = 3$ (errores normales))",
     H1 = r"($H_1:\ A \neq 0\ \text{o}\ K \neq 3$)",
-    formula = r"($JB = \dfrac{N}{6}\left[A^2 + \dfrac{(K-3)^2}{4}\right]\ \overset{H_0}{\sim}\ \chi^2_2$, con $A = m_3/m_2^{3/2}$ y $K = m_4/m_2^2$)",
+    formula = r"($JB = \dfrac{N}{6}\left[A^2 + \dfrac{(K-3)^2}{4}\right]\ \overset{H_0}{\sim}\ \chi^2_2$, con $A = m_3/m_2^{3/2}$ la asimetría y $K = m_4/m_2^2$ la curtosis muestrales)",
     estadistico = JB,
     gl = 2L,
     valor_critico = valor_critico,
@@ -201,7 +201,7 @@ durbin_watson <- function(e, dL = NULL, dU = NULL) {
 
   if (is.null(dL)) {
     decision <- "No evaluada: faltan las cotas $d_L$ y $d_U$ de la tabla"
-    region <- r"(Se rechaza $H_0$ si $d < d_L$; no se rechaza si $d > d_U$; inconclusa si $d_L \le d \le d_U$, con $d_L$ y $d_U$ de la tabla de Savin y White (1977) para $N$ y $k'$.)"
+    region <- r"(Se rechaza $H_0$ si $d < d_L$; no se rechaza si $d > d_U$; inconclusa si $d_L \le d \le d_U$, con $d_L$ y $d_U$ de la tabla de Savin y White (1977) para $N$ y $k'$)"
     valor_critico <- c(dL = NA_real_, dU = NA_real_)
   } else {
     decision <- if (d_eval < dL) {
@@ -212,7 +212,7 @@ durbin_watson <- function(e, dL = NULL, dU = NULL) {
       "Prueba inconclusa ($d_L \\le d \\le d_U$)"
     }
     region <- sprintf(
-      "Se rechaza $H_0$ si $%s < d_L = %s$; no se rechaza si $%s > d_U = %s$; inconclusa si $d_L \\le %s \\le d_U$.",
+      "Se rechaza $H_0$ si $%s < d_L = %s$; no se rechaza si $%s > d_U = %s$; inconclusa si $d_L \\le %s \\le d_U$",
       simbolo, .fmt_num(dL), simbolo, .fmt_num(dU), simbolo
     )
     valor_critico <- c(dL = dL, dU = dU)
@@ -297,4 +297,225 @@ medidas <- function(y, yhat, y_entrenamiento, s = 1) {
                         MASE = mad / escala)
   attr(res, "escala_mase") <- escala
   res
+}
+
+# ---- Pruebas auxiliares (internas) ----------------------------------------------------
+
+# Prueba t de media cero sobre los errores: H0: mu_e = 0 contra H1: mu_e != 0 (dos colas).
+#   t = ebar / (s_e / sqrt(N)) ~ t_{N-1} bajo H0, con s_e la desviación estándar muestral
+#   (divisor N - 1). Región de rechazo al 5 %: |t| > qt(0.975, N - 1).
+.t_media_cero <- function(e) {
+  stopifnot(
+    "e debe ser un vector numérico sin NA" = is.numeric(e) && length(e) > 0L && !anyNA(e),
+    "se necesitan al menos 2 errores" = length(e) >= 2L
+  )
+  N <- length(e)
+  s <- stats::sd(e)
+  stopifnot("los errores son todos iguales: la prueba t no está definida" = s > 0)
+  t <- mean(e) / (s / sqrt(N))
+  gl <- N - 1L
+  valor_critico <- stats::qt(0.975, df = gl)
+
+  list(
+    nombre = "Prueba t de media cero de los errores",
+    H0 = r"($H_0:\ \mu_e = 0$)",
+    H1 = r"($H_1:\ \mu_e \neq 0$)",
+    formula = r"($t = \dfrac{\bar{e}}{s_e/\sqrt{N}}\ \overset{H_0}{\sim}\ t_{N-1}$)",
+    estadistico = t,
+    gl = gl,
+    valor_critico = valor_critico,
+    valor_p = 2 * stats::pt(-abs(t), df = gl),
+    region = sprintf(r"($|t| > t_{0{,}975;\,%d} = %s$)", gl, .fmt_num(valor_critico)),
+    decision = .decision(abs(t) > valor_critico),
+    n = N, media = mean(e), desv = s
+  )
+}
+
+# Contraste individual de la autocorrelación en el rezago h con la banda de ruido blanco
+# (Clase 3, «Prueba individual y sus dos bandas»): H0: rho_h = 0 contra H1: rho_h != 0,
+#   T* = r_h / desv(r_h), con desv(r_h) = 1 / sqrt(n) bajo ruido blanco, T* ~ N(0, 1)
+#   aproximadamente. Rechaza si |T*| > qnorm(0.975), es decir |r_h| > 1,96 / sqrt(n): es la
+#   misma banda que dibuja correlograma(). `n` es el de la sucesión de la que sale `r`.
+.contraste_rh <- function(r, n, h) {
+  stopifnot(
+    "r debe ser un vector numérico sin NA" = is.numeric(r) && length(r) > 0L && !anyNA(r),
+    "n debe ser un entero positivo" = is.numeric(n) && length(n) == 1L && !is.na(n) && n >= 1 && n == floor(n),
+    "h debe ser un entero entre 1 y length(r)" =
+      is.numeric(h) && length(h) == 1L && !is.na(h) && h >= 1 && h <= length(r) && h == floor(h)
+  )
+  z <- r[h] * sqrt(n)
+  valor_critico <- stats::qnorm(0.975)
+
+  list(
+    nombre = sprintf("Contraste individual de la autocorrelación en el rezago h = %d", h),
+    H0 = sprintf(r"($H_0:\ \rho_{%d} = 0$)", h),
+    H1 = sprintf(r"($H_1:\ \rho_{%d} \neq 0$)", h),
+    formula = r"($T^* = \dfrac{r_h}{\sqrt{1/n}} = \sqrt{n}\, r_h\ \overset{H_0}{\approx}\ N(0,1)$)",
+    estadistico = z,
+    gl = NA_real_,
+    valor_critico = valor_critico,
+    valor_p = 2 * stats::pnorm(-abs(z)),
+    region = sprintf(r"($|T^*| > z_{0{,}975} = %s$, es decir $|r_{%d}| > %s$)",
+                     .fmt_num(valor_critico), h, .fmt_num(valor_critico / sqrt(n))),
+    decision = .decision(abs(z) > valor_critico),
+    n = n, h = h, r_h = r[h]
+  )
+}
+
+# ---- .reportar_prueba -----------------------------------------------------------------
+
+# Escribe una prueba de hipótesis en los seis elementos exigidos, en este orden, como
+# markdown listo para `cat()` en un chunk con results = "asis":
+#   1. H0 y H1 en términos del parámetro.
+#   2. Estadístico con su fórmula y su distribución bajo H0, con los grados de libertad.
+#   3. Región de rechazo al 5 % con el valor crítico calculado.
+#   4. Valor observado y valor p.
+#   5. Decisión.
+#   6. Lectura en términos de la serie o del método.
+# Los elementos 1 a 5 salen del objeto que devuelve la prueba; el sexto, la lectura, SIEMPRE
+# se escribe a mano para cada caso y entra como argumento: la función se niega a producir el
+# bloque sin ella, para que una prueba no se reporte solo con la salida de una función.
+#
+# obj:     lista devuelta por ljung_box(), jarque_bera(), durbin_watson(), .t_media_cero()
+#          o .contraste_rh() (mismos campos).
+# lectura: cadena no vacía, escrita por quien analiza.
+.reportar_prueba <- function(obj, lectura) {
+  campos <- c("nombre", "H0", "H1", "formula", "estadistico", "gl", "valor_p", "region", "decision")
+  stopifnot(
+    "obj no es el resultado de una prueba: faltan campos" =
+      is.list(obj) && all(campos %in% names(obj)),
+    "lectura debe ser una cadena no vacía escrita a mano para este caso" =
+      is.character(lectura) && length(lectura) == 1L && !is.na(lectura) && nzchar(trimws(lectura))
+  )
+
+  titulo <- if (is.null(obj$n)) {
+    sprintf("**%s**", obj$nombre)
+  } else {
+    sprintf("**%s** (n = %d)", obj$nombre, as.integer(obj$n))
+  }
+
+  gl_txt <- if (is.na(obj$gl)) {
+    ""
+  } else if (!is.null(obj$m) && !is.null(obj$p)) {
+    sprintf("; $m = %d$, $p = %d$, luego los grados de libertad son $m - p = %d$",
+            as.integer(obj$m), as.integer(obj$p), as.integer(obj$gl))
+  } else {
+    sprintf("; grados de libertad: $%d$", as.integer(obj$gl))
+  }
+
+  p_txt <- if (is.na(obj$valor_p)) {
+    "sin valor p exacto (se decide con las cotas tabuladas)"
+  } else if (obj$valor_p < 0.001) {
+    "valor p < 0,001"
+  } else {
+    paste0("valor p = ", .fmt_p(obj$valor_p))
+  }
+
+  decision <- paste0(obj$decision, " (nivel de significancia del 5 %).")
+  if (!is.null(obj$advertencia)) {
+    decision <- paste0(decision, " *Advertencia: ", obj$advertencia, "*")
+  }
+
+  paste(
+    titulo,
+    "",
+    paste0("1. **Hipótesis.** ", obj$H0, "; ", obj$H1, "."),
+    paste0("2. **Estadístico y distribución bajo $H_0$.** ", obj$formula, gl_txt, "."),
+    paste0("3. **Región de rechazo al 5 %.** ", obj$region, "."),
+    paste0("4. **Valor observado.** estadístico observado = ", .fmt_num(obj$estadistico),
+           "; ", p_txt, "."),
+    paste0("5. **Decisión.** ", decision),
+    paste0("6. **Lectura.** ", trimws(lectura)),
+    "",
+    sep = "\n"
+  )
+}
+
+# ---- validar_errores ------------------------------------------------------------------
+
+#' validar_errores(e, p, T_serie = NULL, dL = NULL, dU = NULL)
+#'
+#' Descripción: validación de los errores de un paso de un método (Clase 3, Parte III:
+#'   los errores deben ser ruido blanco). Sobre los errores sin NA calcula y devuelve:
+#'   - gráfico de los errores en el tiempo, con la línea en cero;
+#'   - correlograma (ACF a mano, PACF) con la banda calculada sobre N, el número de errores;
+#'   - prueba t de media cero (t = ebar / (s_e / sqrt(N)), t_{N-1});
+#'   - Ljung–Box con m - p grados de libertad, m = min(floor(N/4), 24) y T = N;
+#'   - Jarque–Bera (con advertencia si N < 20);
+#'   - Durbin–Watson (por regiones si se dan dL y dU).
+#'   N se declara explícitamente en la salida: es el número de errores, no el T de la serie.
+#'
+#' Los NA solo pueden estar al inicio (calentamiento del método); se descartan y las
+#'   pruebas se hacen sobre los N errores restantes.
+#'
+#' @param e   errores de un paso e_t = y_t - yhat_t (vector; NA en el calentamiento).
+#' @param p   número de parámetros que el método estimó (convención del README): fija los
+#'            grados de libertad m - p de Ljung–Box. Debe ser menor que m.
+#' @param T_serie  tamaño de la serie, opcional y solo informativo: se devuelve junto a N
+#'            para declarar «N errores de una serie de T observaciones».
+#' @param dL,dU  cotas de Durbin–Watson (ver durbin_watson()); opcionales.
+#' @return lista con n, T_serie, e (errores sin NA), correlograma (lista de correlograma()),
+#'   t_media, ljung_box, jarque_bera, durbin_watson, grafico_errores y grafico (errores y
+#'   correlograma en un solo panel). El gráfico solo se imprime si la sesión es interactiva;
+#'   guardarlo en disco es tarea de ejemplos.R.
+#'
+#' Referencia: enunciado, sección 4(a); Clase 3, Parte III.
+validar_errores <- function(e, p, T_serie = NULL, dL = NULL, dU = NULL) {
+  stopifnot(
+    "e debe ser un vector numérico" = is.numeric(e) && length(e) > 0L,
+    "p debe ser un entero no negativo" =
+      is.numeric(p) && length(p) == 1L && !is.na(p) && p >= 0 && p == floor(p),
+    "T_serie debe ser NULL o un entero positivo" =
+      is.null(T_serie) || (is.numeric(T_serie) && length(T_serie) == 1L && !is.na(T_serie) &&
+                             T_serie >= 1 && T_serie == floor(T_serie))
+  )
+
+  # correlograma() valida que los NA sean solo de calentamiento y descarta esos NA:
+  # su n es el número de errores, N, sobre el que se calcula todo lo demás.
+  cg <- correlograma(e)
+  N <- cg$n
+  stopifnot("T_serie no puede ser menor que el número de errores" = is.null(T_serie) || T_serie >= N)
+  if (cg$m <= p) {
+    stop(sprintf(paste0("con N = %d errores, m = min(floor(N/4), 24) = %d no supera p = %d: ",
+                        "Ljung-Box no tiene grados de libertad (m - p > 0)"),
+                 N, cg$m, as.integer(p)), call. = FALSE)
+  }
+  tiempo <- (length(e) - N + 1L):length(e)
+  e_ok <- e[tiempo]
+
+  lb <- ljung_box(cg$acf, N, cg$m, p)
+  lb$nombre <- "Prueba de Ljung–Box sobre los errores"
+
+  g_err <- ggplot2::ggplot(data.frame(t = tiempo, e = e_ok), ggplot2::aes(x = t, y = e)) +
+    ggplot2::geom_hline(yintercept = 0, colour = "grey40") +
+    ggplot2::geom_line(colour = "#1F4E79", linewidth = 0.5) +
+    ggplot2::geom_point(colour = "#1F4E79", size = 1.3) +
+    ggplot2::labs(title = "Errores de un paso", x = "t (índice de la observación)",
+                  y = "e_t = y_t - yhat_t") +
+    .tema_tarea()
+
+  # Al anidar el panel de correlograma() se pierde su subtítulo, así que se vuelve a escribir
+  # aquí: N (y T si se dio) y m quedan declarados en la propia figura.
+  grafico <- patchwork::wrap_plots(g_err, cg$grafico, ncol = 1, heights = c(1, 2.2)) +
+    patchwork::plot_annotation(
+      title = "Validación de los errores de un paso",
+      subtitle = sprintf(
+        "N = %d errores%s; m = %d rezagos.\nLíneas discontinuas: banda de ruido blanco al 95 %% (±%s)",
+        N, if (is.null(T_serie)) "" else sprintf(" (serie de T = %d observaciones)", as.integer(T_serie)),
+        cg$m, formatC(cg$banda, format = "f", digits = 4, decimal.mark = ",")
+      ),
+      theme = .tema_tarea()
+    )
+  if (interactive()) {
+    print(grafico)
+  }
+
+  list(
+    n = N, T_serie = T_serie, e = e_ok, correlograma = cg,
+    t_media = .t_media_cero(e_ok),
+    ljung_box = lb,
+    jarque_bera = jarque_bera(e_ok),
+    durbin_watson = durbin_watson(e_ok, dL, dU),
+    grafico_errores = g_err, grafico = grafico
+  )
 }
