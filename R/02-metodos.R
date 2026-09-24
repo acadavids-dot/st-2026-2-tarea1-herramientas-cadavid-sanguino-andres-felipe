@@ -202,3 +202,60 @@ ajustar_ses <- function(y, alpha) {
     n_param = 1L
   )
 }
+
+# ---- ajustar_dmm ----------------------------------------------------------------------
+
+#' ajustar_dmm(y, k)
+#'
+#' Descripción: doble media móvil de orden k; corrige el rezago de la media móvil ante una
+#'   tendencia lineal local combinando MM y la media de las últimas k medias móviles.
+#'
+#' Ecuaciones (Definición 3 de la Clase 4):
+#'   MM_t(k)  = (1/k) sum_{i=0}^{k-1} Y_{t-i}                para t >= k,
+#'   DMM_t(k) = (1/k) sum_{i=0}^{k-1} MM_{t-i}(k)            para t >= 2k - 1,
+#'   Ehat_t = 2 MM_t - DMM_t,   beta1hat(t) = 2/(k - 1) (MM_t - DMM_t),
+#'   Yhat_{t+1} = Ehat_t + beta1hat(t)                        para t >= 2k - 1.
+#'   Con tendencia lineal MM rezaga (k-1)/2 y DMM rezaga k-1 (Proposición 9); 2 MM - DMM
+#'   recupera el nivel y la diferencia, la pendiente.
+#'   Un solo recorrido con sumas corridas: MM_t = MM_{t-1} + (Y_t - Y_{t-k})/k y
+#'   DMM_t = DMM_{t-1} + (MM_t - MM_{t-k})/k.
+#'
+#' Inicialización: MM_k = mean(Y_1..Y_k); DMM_{2k-1} = mean(MM_k..MM_{2k-1}).
+#' Calentamiento: yhat[1:(2k - 1)] = NA; el primer pronóstico es yhat[2k].
+#' Pronóstico extramuestral: Yhat_{T+h} = Ehat_T + beta1hat(T) h.
+#'
+#' @param y  vector numérico ordenado, sin NA.
+#' @param k  ventana: entero con k >= 2 (con k = 1 el factor 2/(k-1) no existe) y
+#'           2k - 1 <= length(y).
+#' @return objeto de clase "metodo_pronostico". En parametros: k, mm, dmm, nivel (Ehat_t) y
+#'   pendiente (beta1hat(t)), todos de largo T con NA donde no están definidos.
+#'   n_param = 1 (se estima k).
+#'
+#' Referencia: Clase 4, Parte VIII (dobles medias móviles).
+ajustar_dmm <- function(y, k) {
+  y <- .validar_serie(y)
+  stopifnot("k debe ser un entero mayor o igual a 2" = .es_entero(k, 2))
+  n <- length(y)
+  stopifnot("2k - 1 no puede superar length(y)" = 2 * k - 1 <= n)
+
+  mm <- rep(NA_real_, n)
+  dmm <- rep(NA_real_, n)
+  for (t in k:n) {                         # un solo recorrido para MM y DMM
+    mm[t] <- if (t == k) sum(y[1:k]) / k else mm[t - 1L] + (y[t] - y[t - k]) / k
+    if (t == 2 * k - 1) {
+      dmm[t] <- sum(mm[k:t]) / k           # primera DMM: se calcula una sola vez
+    } else if (t > 2 * k - 1) {
+      dmm[t] <- dmm[t - 1L] + (mm[t] - mm[t - k]) / k
+    }
+  }
+  nivel <- 2 * mm - dmm
+  pendiente <- 2 / (k - 1) * (mm - dmm)
+  yhat <- c(NA_real_, (nivel + pendiente)[-n])  # yhat[t] = Ehat_{t-1} + beta1hat(t-1)
+
+  .nuevo_metodo(
+    metodo = sprintf("Doble media móvil (k = %d)", as.integer(k)), y = y, yhat = yhat,
+    pronosticar = .pronosticador_lineal(nivel[n], pendiente[n]),
+    parametros = list(k = k, mm = mm, dmm = dmm, nivel = nivel, pendiente = pendiente),
+    n_param = 1L
+  )
+}
