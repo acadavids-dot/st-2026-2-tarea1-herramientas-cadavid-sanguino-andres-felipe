@@ -574,3 +574,41 @@ validar_errores <- function(e, p, T_serie = NULL, dL = NULL, dU = NULL) {
             "el número de errores cambió: recalcular las cotas de Durbin-Watson" = N == fila$N)
   fila
 }
+
+
+# Prueba t de un coeficiente de una tendencia con error estándar robusto (HAC), en el mismo
+# formato que las demás pruebas para que .reportar_prueba() la escriba en seis elementos.
+#   simbolo     el coeficiente en LaTeX sin signos de dólar, p. ej. r"(\beta_1)", "a" o r"(\theta)"
+#   estimacion  estimación del coeficiente
+#   ee          error estándar robusto (columna ee_robusto de la tabla de ajustar_tendencia())
+#   gl          grados de libertad, T - p (parametros$gl)
+#   n           tamaño de la muestra de la regresión, T (se muestra en el título de la prueba)
+# Bajo H0 el estadístico se refiere a la t de Student con T - p grados de libertad (elección
+# documentada en ajustar_tendencia(): con T pequeño es más conservadora que la normal). La
+# aproximación es asintótica: con errores autocorrelacionados el HAC corrige la varianza pero
+# no vuelve exacta la distribución.
+.t_coeficiente <- function(simbolo, estimacion, ee, gl, n) {
+  stopifnot(
+    "simbolo debe ser una cadena" = is.character(simbolo) && length(simbolo) == 1L,
+    "estimacion y ee deben ser números" = is.numeric(estimacion) && is.numeric(ee) &&
+      length(estimacion) == 1L && length(ee) == 1L && !anyNA(c(estimacion, ee)),
+    "ee debe ser positivo" = ee > 0,
+    "gl debe ser un entero positivo" = is.numeric(gl) && length(gl) == 1L && gl >= 1 && gl == floor(gl),
+    "n debe ser un entero mayor que gl" = is.numeric(n) && length(n) == 1L && n > gl && n == floor(n)
+  )
+  t <- estimacion / ee
+  valor_critico <- stats::qt(0.975, df = gl)
+  list(
+    nombre = sprintf("Prueba t del coeficiente $%s$ con error estándar robusto", simbolo),
+    H0 = sprintf(r"($H_0:\ %s = 0$)", simbolo),
+    H1 = sprintf(r"($H_1:\ %s \neq 0$)", simbolo),
+    formula = sprintf(r"($t = \dfrac{\hat{%s}}{\widehat{EE}_{HAC}(\hat{%s})}\ \overset{H_0}{\approx}\ t_{T-p}$)", simbolo, simbolo),
+    estadistico = t,
+    gl = gl,
+    valor_critico = valor_critico,
+    valor_p = 2 * stats::pt(-abs(t), df = gl),
+    region = sprintf(r"($|t| > t_{0{,}975;\,%d} = %s$)", as.integer(gl), .fmt_num(valor_critico)),
+    decision = .decision(abs(t) > valor_critico),
+    n = n
+  )
+}
