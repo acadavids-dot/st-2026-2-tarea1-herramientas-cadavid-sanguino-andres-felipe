@@ -1651,3 +1651,212 @@ en validación el método sobrestima el cuarto trimestre de forma sistemática, 
 `r n2(mean(abs(e_m[-seq(s, h, by = s)])))` dólares de error absoluto medio en los demás trimestres. Por eso el horizonte razonable es de un año
 para el nivel anual, con el pronóstico trimestral usado con reserva; para pronosticar cada trimestre haría falta un
 método que modele la estacionalidad (ficticias estacionales o Holt–Winters), que este trabajo no implementa.
+
+# Ejemplo 8. Holt sobre `austres`
+
+Este ejemplo usa la misma serie del ejemplo 4, de modo que Holt y la doble media móvil se comparan sobre exactamente los
+mismos datos y el mismo tramo de validación.
+
+## Descripción de la serie
+
+```{r}
+#| label: ej8-datos
+x <- austres
+d <- leer_serie(x,
+                fuente = "Brockwell PJ, Davis RA (1996). Introduction to Time Series and Forecasting. Springer (paquete datasets, austres)",
+                unidad = "Residentes de Australia (miles)")
+descripcion(x, "austres", d)
+```
+
+## Patrón de la serie
+
+```{r}
+#| label: ej8-serie
+graficar_serie(d, "Ejemplo 8. Residentes de Australia, trimestral")
+```
+
+```{r}
+#| label: ej8-correlograma
+#| fig-height: 6
+cg <- correlograma(d)
+cg$grafico
+```
+
+```{r}
+#| label: ej8-pruebas-serie
+#| results: asis
+n_total <- nrow(d)
+r_1 <- .contraste_rh(cg$acf, n_total, 1)
+pp(r_1, paste0("r_1 = ", n4(cg$acf[1]), " frente a una banda de ±", n4(cg$banda), ": cada trimestre repite casi entero al anterior. ",
+               "Es la autocorrelación de una serie que crece y no de una que oscila alrededor de un nivel."))
+r_8 <- .contraste_rh(cg$acf, n_total, 8)
+pp(r_8, paste0("Aun en el rezago 8, dos años atrás, la autocorrelación es ", n4(cg$acf[8]), ", muy por encima de la banda de ±",
+               n4(cg$banda), ". La ACF baja casi en línea recta y no se acerca a cero en ", cg$m, " rezagos: la serie no es estacionaria en media."))
+lb0 <- ljung_box(cg$acf, n_total, cg$m, 0)
+pp(lb0, paste0("Q = ", n4(lb0$estadistico), " con ", lb0$gl, " grados de libertad y valor p ", pv(lb0$valor_p),
+               ": rechazo contundente, la serie está lejos del ruido blanco."))
+```
+
+**Lectura del patrón.** Es una tendencia creciente casi recta (una regresión sobre $t$ explica el
+`r n2(100 * cor(seq_len(n_total), d$y)^2)` % de la variación), pero con una pendiente que se mueve. Promediando el crecimiento
+sobre ventanas de ocho trimestres, la pendiente local va de un mínimo de
+
+```{r}
+#| label: ej8-pendiente-local
+inc <- diff(d$y)                                                   # crecimiento trimestral
+pend_local <- vapply(seq_len(length(inc) - 7), function(i) mean(inc[i:(i + 7)]), 0)
+```
+
+`r n2(min(pend_local))` a un máximo de `r n2(max(pend_local))` miles de residentes por trimestre. Ese es el supuesto de Holt: una
+tendencia lineal *local*, con un nivel y una pendiente que se actualizan con cada dato. Una sola recta para toda la serie
+no puede seguir esa variación de la pendiente, y por eso aquí se usa un método que la reestima.
+
+## Partición
+
+```{r}
+#| label: ej8-particion
+h <- min(12, floor(0.2 * n_total)); T_est <- n_total - h
+est <- d[seq_len(T_est), ]; val <- d[T_est + seq_len(h), ]
+```
+
+Con $T = `r n_total`$ y $h = `r h`$ (tres años), el tramo de estimación va de `r format(est$fecha[1])` a
+`r format(est$fecha[T_est])` ($T_{est} = `r T_est`$) y el de validación de `r format(val$fecha[1])` a
+`r format(val$fecha[h])`.
+
+## Optimización de las constantes
+
+El par $(\alpha, \beta)$ se elige con `optimizar()` sobre la rejilla de $19 \times 19$ valores de $0{,}05$ a $0{,}95$, minimizando
+el MSE de un paso dentro del tramo de estimación (origen común en $t = 2$).
+
+```{r}
+#| label: ej8-optimizar
+opt <- optimizar(est$y, "holt")
+opt$grafico
+tab(head(opt$rejilla[order(opt$rejilla$mse), ], 6), 2)
+```
+
+El óptimo es $\alpha =$ `r n2(opt$optimo$alpha)` y $\beta =$ `r n2(opt$optimo$beta)` con MSE `r n4(opt$optimo$mse)`, sobre
+`r opt$n_err` errores. **El óptimo está en el borde de la rejilla** (`r opt$en_borde`): $\alpha$ toma el máximo permitido,
+`r n2(max(opt$rejilla$alpha))`, mientras que $\beta$ es interior. Un $\alpha$ en el borde superior significa que el nivel copia casi
+por completo el último dato, que es el comportamiento del pronóstico ingenuo, y señala que la serie no es estacionaria en media,
+lo que ya se sabía por el correlograma. La diferencia con el ingenuo es la pendiente: con $\beta =$ `r n2(opt$optimo$beta)` esa
+pendiente se reestima con mucho peso en lo reciente y se suma al nivel, así que el método sigue el ritmo de crecimiento en vez de
+quedarse quieto. La superficie es muy inclinada: el MSE va desde `r n2(min(opt$rejilla$mse))` hasta
+`r n2(max(opt$rejilla$mse))` (`r n2(max(opt$rejilla$mse) / min(opt$rejilla$mse))` veces), de modo que elegir las
+constantes importa, y el mínimo está en la zona de $\alpha$ alto y $\beta$ alto que muestra el mapa. Que el óptimo toque el borde
+de $\alpha$ sugiere que valores mayores (0,96 a 0,99) podrían mejorar un poco, pero la rejilla del enunciado no los
+incluye y el nivel ya copia el dato al `r n2(100 * opt$optimo$alpha)` %.
+
+## Ajuste y medidas
+
+```{r}
+#| label: ej8-ajuste
+fit <- ajustar_holt(est$y, opt$optimo$alpha, opt$optimo$beta)
+pron <- fit$pronosticar(h)
+ref <- rep(est$y[T_est], h)                       # ingenuo: el último valor observado
+m_in <- .medir(est$y, fit$yhat, est$y)            # un paso, dentro del tramo de estimación
+m_val <- .medir(val$y, pron, est$y)               # h pronósticos sobre el tramo de validación
+m_ref <- .medir(val$y, ref, est$y)                # el ingenuo, mismo tramo y mismo h
+tab(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo"))
+# La doble media móvil del ejemplo 4 sobre los mismos datos, para compararla en el mismo tramo de validación
+dmm_ej4 <- ajustar_dmm(est$y, optimizar(est$y, "dmm")$optimo$k)
+m_dmm <- .medir(val$y, dmm_ej4$pronosticar(h), est$y)
+e_m <- val$y - pron; e_r <- val$y - ref           # errores de validación del método y del ingenuo
+```
+
+Holt supera al ingenuo por un margen muy amplio: MASE de validación `r n4(m_val$MASE)` contra `r n4(m_ref$MASE)`, y un MSE de
+`r n2(m_val$MSE)` contra `r n2(m_ref$MSE)` (`r n2(100 * (1 - m_val$MSE / m_ref$MSE))` % menos). También mejora a la doble media móvil del
+ejemplo 4 sobre los mismos `r h` trimestres: MASE `r n4(m_val$MASE)` contra `r n4(m_dmm$MASE)` y MSE `r n2(m_val$MSE)` contra
+`r n2(m_dmm$MSE)` (`r n2(100 * (1 - m_val$MSE / m_dmm$MSE))` % menos). El MASE de validación es mayor que uno en el método porque se
+escala con el error del ingenuo de *un paso* dentro de la muestra (`r n4(attr(m_in, "escala_mase"))`); la comparación que corresponde es la
+del ingenuo al mismo horizonte.
+
+## Validación de los errores de un paso
+
+```{r}
+#| label: ej8-validacion
+#| fig-height: 7
+cot <- .cotas("ej08", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+ve$grafico
+```
+
+Son $N = `r ve$n`$ errores de un paso (solo el primer trimestre queda sin pronóstico), con $m = `r ve$correlograma$m`$ rezagos y banda de
+±`r n4(ve$correlograma$banda)`, calculada sobre $N$.
+
+```{r}
+#| label: ej8-pruebas-errores
+#| results: asis
+pp(ve$t_media, paste0("El error medio es ", n4(mean(ve$e)), " sobre una desviación de ", n4(sd(ve$e)),
+                      ": no se distingue de cero, así que Holt no sobrestima ni subestima en promedio dentro de la muestra."))
+pp(ve$ljung_box, paste0("Q = ", n4(ve$ljung_box$estadistico), " con ", ve$ljung_box$gl, " grados de libertad (m = ",
+                        ve$correlograma$m, ", p = 2 porque se estimaron alpha y beta) y valor p ", pv(ve$ljung_box$valor_p),
+                        ": se rechaza que los errores sean incorrelacionados. ", sum(abs(ve$correlograma$acf) > ve$correlograma$banda),
+                        " de los ", ve$correlograma$m, " rezagos salen de la banda: r_4 = ", n4(ve$correlograma$acf[4]),
+                        " y r_6 = ", n4(ve$correlograma$acf[6]), ", con r_2 = ", n4(ve$correlograma$acf[2]),
+                        ". Es el mismo patrón alterno de período 4 que dejó la doble media móvil en el ejemplo 4."))
+pp(ve$jarque_bera, paste0("JB = ", n4(ve$jarque_bera$estadistico), " con asimetría ", n4(ve$jarque_bera$A), " y curtosis ",
+                          n4(ve$jarque_bera$K), " (0 y 3 para una normal): se rechaza la normalidad por una cola derecha muy pesada. Como ",
+                          "muestra el análisis de sensibilidad siguiente, la causa es un solo error, el primero."))
+pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " queda por debajo de d_L = ", n2(cot$dL), " (N = ", ve$n,
+                            ", k' = 1): la prueba rechaza la ausencia de autocorrelación positiva de orden uno, aunque r_1 = ",
+                            n4(ve$correlograma$acf[1]), " es pequeño. Esa discrepancia también la produce el primer error, como se ve a continuación."))
+```
+
+**Análisis de sensibilidad: el primer error.** Holt se inicializa con nivel $L_1 = Y_1$ y pendiente $\hat T_1 = 0$, de modo que
+el primer pronóstico es $\hat Y_2 = Y_1$ y su error es simplemente el crecimiento del primer trimestre. Ese error es un valor
+atípico de calentamiento:
+
+```{r}
+#| label: ej8-sensibilidad
+e_sin <- fit$errores; e_sin[2] <- NA              # se retira el primer error (el del calentamiento de la pendiente)
+ve_sin <- validar_errores(e_sin, fit$n_param, T_est, cot$dL, cot$dU)
+data.frame(Caso = c("Con los N errores", "Sin el primer error"),
+           N = c(ve$n, ve_sin$n),
+           `Primer error` = c(fit$errores[2], NA),
+           `Jarque-Bera` = c(ve$jarque_bera$estadistico, ve_sin$jarque_bera$estadistico),
+           `p de JB` = vapply(c(ve$jarque_bera$valor_p, ve_sin$jarque_bera$valor_p), pv, ""),
+           `Durbin-Watson` = c(ve$durbin_watson$estadistico, ve_sin$durbin_watson$estadistico),
+           `Ljung-Box` = c(ve$ljung_box$estadistico, ve_sin$ljung_box$estadistico),
+           check.names = FALSE) |> tab()
+```
+
+El primer error vale `r n2(fit$errores[2])`, es decir, `r n2(fit$errores[2] / sd(e_sin, na.rm = TRUE))` desviaciones estándar de los demás.
+Al retirarlo, Jarque–Bera baja de `r n2(ve$jarque_bera$estadistico)` a `r n2(ve_sin$jarque_bera$estadistico)` (valor p
+`r pv(ve_sin$jarque_bera$valor_p)`: ya no se rechaza) y Durbin–Watson sube de `r n4(ve$durbin_watson$estadistico)` a
+`r n4(ve_sin$durbin_watson$estadistico)`, que ya no rechaza (por encima de 2 se contrasta la alternativa negativa con $4 - d =$
+`r n4(4 - ve_sin$durbin_watson$estadistico)`, mayor que $d_U =$ `r n2(cot$dU)`; las cotas de $N = `r ve$n`$ se usan también para
+$N = `r ve_sin$n`$, porque con dos decimales coinciden). En cambio **Ljung–Box no depende de ese error**: sube de
+`r n2(ve$ljung_box$estadistico)` a `r n2(ve_sin$ljung_box$estadistico)`, porque el rezago 4 (`r n4(ve_sin$correlograma$acf[4])` sin él) es
+real y no producto del calentamiento. La conclusión se separa en dos: los rechazos de normalidad y de Durbin–Watson son
+un efecto de la inicialización sobre un solo dato, y el de Ljung–Box refleja una estructura de período 4 que el método no modela.
+
+## Gráfico final
+
+```{r}
+#| label: ej8-final
+.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 8. Holt: ajuste y pronóstico")
+```
+
+## Conclusión
+
+Se ajustó un Holt lineal con $\alpha =$ `r n2(opt$optimo$alpha)` y $\beta =$ `r n2(opt$optimo$beta)`, elegidos por `optimizar()`
+(MSE de un paso `r n4(opt$optimo$mse)`, con $\alpha$ en el borde de la rejilla), sobre los `r T_est` trimestres de estimación. Dentro de la
+muestra, a un paso, el MSE es `r n4(m_in$MSE)`, el MAD `r n4(m_in$MAD)` y el MASE `r n4(m_in$MASE)` sobre `r m_in$N` errores. En los
+`r h` trimestres de validación el MSE es `r n4(m_val$MSE)`, el MAD `r n4(m_val$MAD)` y el MASE `r n4(m_val$MASE)`, frente a
+`r n4(m_ref$MSE)`, `r n4(m_ref$MAD)` y `r n4(m_ref$MASE)` del ingenuo: el método reduce el MSE del ingenuo en
+`r n2(100 * (1 - m_val$MSE / m_ref$MSE))` % y el de la doble media móvil en `r n2(100 * (1 - m_val$MSE / m_dmm$MSE))` %. La validación de
+errores muestra error medio nulo (valor p `r pv(ve$t_media$valor_p)`) y un rechazo de Ljung–Box (valor p `r pv(ve$ljung_box$valor_p)`) que se debe
+a una estructura de período 4; los rechazos de Jarque–Bera (valor p `r pv(ve$jarque_bera$valor_p)`) y de Durbin–Watson (`r n4(ve$durbin_watson$estadistico)`
+frente a $d_L =$ `r n2(cot$dL)`) desaparecen al retirar el primer error, que es del calentamiento.
+
+## Recomendación
+
+El pronóstico le sirve a quien planee con la población de Australia con un horizonte de uno a cuatro trimestres, y mejora al de la
+doble media móvil. El límite es que sobrestima de forma sistemática: en los `r h` trimestres de validación el error
+(observado menos pronóstico) fue negativo en `r sum(e_m < 0)` de `r h`, con `r n2(abs(e_m[1]))` en $h = 1$
+(`r n2(100 * abs(e_m[1]) / val$y[1])` % del valor observado) y `r n2(abs(e_m[h]))` en $h = `r h`$
+(`r n2(100 * abs(e_m[h]) / val$y[h])` %), unos `r n2((abs(e_m[h]) - abs(e_m[1])) / (h - 1))` miles más por cada trimestre de horizonte. La
+pendiente con la que Holt extrapola (`r n2(fit$parametros$pendiente[T_est])` miles por trimestre al final de la estimación) fue mayor que la
+observada después (`r n2(mean(diff(c(est$y[T_est], val$y))))`), y como el error de una pendiente se acumula linealmente con el horizonte, más allá de un año el
+pronóstico ya no es fiable sin reestimar con cada dato nuevo.
