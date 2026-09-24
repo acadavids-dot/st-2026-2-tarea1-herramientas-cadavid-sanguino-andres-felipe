@@ -14,3 +14,247 @@ execute:
   echo: true
   warning: true
 ---
+
+# Introducción y convenciones
+
+Este informe presenta una caja de herramientas de pronóstico escrita a mano en R: lectura de series con
+verificación de fechas, gráficos, correlograma, pruebas de hipótesis sobre la serie y sobre los errores,
+medidas de error y ocho métodos de pronóstico (media simple, media móvil, suavizamiento exponencial simple,
+doble media móvil, tendencias lineal, cuadrática y exponencial, y Holt) con la optimización de sus constantes.
+Cada método se aplica a una serie cuyo patrón corresponde a su supuesto, y un noveno ejemplo, el
+contraejemplo, aplica un método a una serie cuyo patrón lo contradice para mostrar en qué se nota la falla.
+
+El código de las funciones vive en `R/` y aquí solo se carga; el código de cada ejemplo se muestra completo.
+Toda cifra del texto sale de código que corre al renderizar este documento. Los decimales llevan coma, los
+estadísticos cuatro cifras y los valores p tres (`< 0,001` cuando corresponde).
+
+```{r}
+#| label: setup
+invisible(lapply(sort(list.files("../R", pattern = "\\.R$", full.names = TRUE)), source))
+set.seed(2026)  # ningún paso del informe es aleatorio; se fija por regla del enunciado
+knitr::opts_chunk$set(fig.width = 8, fig.height = 4.6, fig.align = "center", out.width = "92%")
+
+# Formato de las cifras del texto: coma decimal, 4 cifras (n4), 2 cifras (n2), valor p (pv)
+n4 <- function(x) .fmt_num(x, 4)
+n2 <- function(x) .fmt_num(x, 2)
+pv <- .fmt_p
+# Tablas con coma decimal y 4 cifras
+tab <- function(df, digitos = 4) knitr::kable(df, digits = digitos, format.args = list(decimal.mark = ","))
+# Notación científica con coma decimal, para diferencias del orden de 1e-12
+cient <- function(x, digitos = 2) format(x, digits = digitos, scientific = TRUE, decimal.mark = ",")
+# Una prueba de hipótesis en sus seis elementos; la lectura es el sexto
+pp <- function(obj, lectura) cat(.reportar_prueba(obj, lectura), sep = "\n")
+# Descripción de una serie con cifras verificadas por código (no escritas a mano)
+descripcion <- function(x, nombre, d) {
+  data.frame(
+    Campo = c("Nombre en R", "Fuente (help)", "Unidad", "Frecuencia", "Inicio (año, período)",
+              "Fin (año, período)", "Rango de fechas", "Observaciones"),
+    Valor = c(nombre, attr(d, "fuente"), attr(d, "unidad"), frequency(x),
+              paste(start(x), collapse = ", "), paste(end(x), collapse = ", "),
+              paste(format(d$fecha[1]), "a", format(d$fecha[nrow(d)])), length(x))
+  )
+}
+```
+
+## Convenciones que fijan los números {-}
+
+Cuando el enunciado y las notas no fijan una decisión, se toma una, se documenta y se muestra su efecto.
+Estas son las que determinan las cifras de este documento.
+
+- **Partición.** El tramo de validación son las últimas $h = \min\{12, \lfloor 0{,}2\,T\rfloor\}$
+  observaciones; el de estimación, las $T_{est} = T - h$ anteriores. Ningún parámetro se elige con el tramo de
+  validación. En las series estacionales ($s = 4$ en `JohnsonJohnson`, $s = 12$ en `AirPassengers`) $h = 12$
+  cubre al menos un ciclo completo.
+- **Errores de un paso.** $\hat Y_t$ usa solo información hasta $t-1$; el calentamiento del método queda en `NA`.
+  En cada validación se declara $N$, el número de errores, que no es el $T$ de la serie.
+- **Referente.** El pronóstico ingenuo $\hat Y_{T+h} = Y_T$, o el ingenuo estacional (el último ciclo repetido)
+  en las series estacionales. El MASE se escala con el error absoluto medio del ingenuo de período $s$ **dentro
+  del tramo de estimación**, de modo que un MASE menor que uno es mejor que ese ingenuo de un paso.
+- **Correlograma.** La ACF se calcula a mano con divisor $T$ (una sola cifra en el denominador), la banda de
+  ruido blanco es $\pm\, z_{0{,}975}/\sqrt{n}$ con $n$ el número de valores graficados (los errores, no la
+  serie, cuando se grafican errores) y $m = \min\{\lfloor n/4\rfloor, 24\}$ rezagos.
+- **Ljung–Box.** $Q_m$ se refiere a $\chi^2_{m-p}$, con $p$ el número de parámetros que el método estimó sobre la
+  muestra (tabla siguiente); sobre la serie original $p = 0$.
+- **Optimización.** `optimizar()` minimiza el MSE de un paso **dentro del tramo de estimación** sobre las
+  rejillas del enunciado, con origen común: el MSE de todas las filas se calcula desde el primer período en
+  que la ventana más exigente de la rejilla ya produce pronóstico ($t = 13$ en media móvil, $t = 24$ en doble
+  media móvil, $t = 2$ en SES y Holt). En caso de empate gana la primera fila de la rejilla.
+- **Tendencias.** Los `yhat` son los valores ajustados de una regresión que usa toda la muestra de estimación,
+  así que no son pronósticos con información hasta $t-1$ y su MSE dentro de muestra es optimista frente al de
+  los métodos de suavizamiento. El error estándar robusto es el de Newey–West (núcleo de Bartlett,
+  $L = \lfloor 4\,(T/100)^{2/9}\rfloor$ rezagos, sin corrección por grados de libertad) y los valores p usan la
+  $t$ de Student con $T-p$ grados de libertad. La tendencia exponencial se estima sobre $\ln Y_t$: su
+  pronóstico $e^{\hat a + \hat\theta t}$ estima la mediana condicional y no la media.
+- **Durbin–Watson.** Sin valor p exacto; se decide con las cotas $d_L$ y $d_U$ al 5 % de la tabla de Savin y
+  White (1977). Como la tabla no cubre todos los $N$ de este trabajo, las cotas se calcularon de forma
+  exacta con la definición de Durbin y Watson (1951) y la integral de Imhof (1961), y ese cálculo reproduce
+  doce filas de la tabla con diferencias de a lo sumo $0{,}005$. Se redondean a dos decimales, como la tabla, y
+  para los métodos de suavizamiento se usa $k' = 1$ (aproximación declarada: no hay matriz de diseño).
+- **MAPE.** Si algún valor evaluado es cero el MAPE no está definido y se reporta `NA` con aviso; el dato no se
+  omite en silencio (ocurre en `discoveries`).
+
+| Método | $p$ | Qué se estimó |
+|---|---|---|
+| Media simple | 0 | nada se elige sobre la muestra |
+| Media móvil | 1 | $k$ |
+| Suavizamiento exponencial simple | 1 | $\alpha$ |
+| Doble media móvil | 1 | $k$ |
+| Tendencia lineal | 2 | $\beta_0, \beta_1$ |
+| Tendencia cuadrática | 3 | $\beta_0, \beta_1, \beta_2$ |
+| Tendencia exponencial | 2 | $a, \theta$ |
+| Holt | 2 | $\alpha, \beta$ |
+
+: Parámetros estimados $p$ que se restan a los grados de libertad de Ljung–Box. {#tbl-p}
+
+### Sobre el uso de IA {-}
+
+El código y la redacción de este informe, incluidas las lecturas de cada prueba de hipótesis, se elaboraron
+con asistencia de Claude (Anthropic). El detalle de qué se pidió, qué se recibió y qué se verificó está en la
+declaración de uso de IA del `README.md`.
+
+# Verificaciones contra R
+
+Antes de usar las funciones se comprueban contra las de R. Estas verificaciones son el único lugar de este
+documento (junto a `ejemplos.R`) donde aparecen `acf()`, `lm()` y `Box.test()`. Cada fila reporta la
+diferencia máxima observada y su tolerancia; el documento se detiene si alguna la supera.
+
+Las equivalencias de los métodos se miden como error **relativo** a $\max|y|$. La razón se ve con la serie
+`austres`, cuyos datos tienen un decimal y valen cerca de $1{,}4\times 10^{4}$: se compara la media simple
+recursiva y la media directa `mean(y[1:t])` con una referencia exacta (los datos por diez son enteros y su suma
+acumulada es exacta en punto flotante, con una sola división al final).
+
+```{r}
+#| label: verif-ulp
+y <- as.numeric(austres); n <- length(y)
+recursiva <- ajustar_media(y)$yhat[-1]
+directa   <- vapply(1:(n - 1), function(t) mean(y[1:t]), 0)
+exacta    <- cumsum(round(y * 10))[1:(n - 1)] / (1:(n - 1)) / 10
+dif_rec_dir <- max(abs(recursiva - directa)); dif_dir_exa <- max(abs(directa - exacta))
+ulp <- 2^(floor(log2(max(y))) - 52)   # distancia entre dos números representables en max(y)
+```
+
+La recursión difiere del promedio directo en `r cient(dif_rec_dir)` y `mean()` difiere de la referencia exacta
+en `r cient(dif_dir_exa)`, mientras que un ulp en el mayor de los datos mide `r cient(ulp)`: las diferencias
+son del orden de un ulp, ruido de punto flotante y no un error del método. Una cota absoluta de $10^{-12}$ no la cumple ninguna implementación
+correcta con estos datos, así que se mide el error relativo a $\max|y|$ con esa misma cota.
+
+Primero, la ACF a mano, su banda y la prueba de Ljung–Box contra `acf()` y `Box.test()`:
+
+```{r}
+#| label: verif-acf
+fila_v <- function(prueba, dif, tol) data.frame(prueba = prueba, dif = dif, tol = tol, ok = dif < tol)
+
+series0 <- list(Nile = Nile, LakeHuron = LakeHuron, austres = austres, discoveries = discoveries,
+                airmiles = airmiles, JohnsonJohnson = JohnsonJohnson, AirPassengers = AirPassengers)
+
+# ACF a mano, banda y Ljung–Box contra acf() y Box.test()
+dif_acf <- dif_banda <- dif_Q <- dif_Qp <- 0
+for (x in series0) {
+  y <- as.numeric(x); n <- length(y)
+  for (m in unique(c(4, min(floor(n / 4), 24)))) {
+    cg <- correlograma(y, m)
+    ref <- acf(y, lag.max = m, plot = FALSE)
+    dif_acf <- max(dif_acf, max(abs(cg$acf - ref$acf[-1])))
+    dif_banda <- max(dif_banda, abs(cg$banda - qnorm((1 + 0.95) / 2) / sqrt(ref$n.used)))
+    for (p in 0:min(3, m - 1)) {
+      lb <- ljung_box(cg$acf, n, m, p)
+      bt <- Box.test(y, lag = m, type = "Ljung-Box", fitdf = p)
+      dif_Q <- max(dif_Q, abs(lb$estadistico - bt$statistic) / bt$statistic)
+      dif_Qp <- max(dif_Qp, abs(lb$valor_p - bt$p.value))
+    }
+  }
+}
+```
+
+Segundo, las equivalencias de los métodos (media móvil recursiva contra el promedio directo por ventana, SES
+contra su promedio ponderado finito, doble media móvil contra su definición y Holt contra su forma de
+corrección de error):
+
+```{r}
+#| label: verif-metodos
+# Equivalencias de los métodos (error relativo a max|y|)
+dif_mm <- dif_ses <- dif_pesos <- dif_dmm <- dif_holt <- 0
+for (x in series0) {
+  y <- as.numeric(x); n <- length(y); esc <- max(abs(y))
+  for (k in 2:12) {                                     # MM recursiva vs promedio directo por ventana
+    directa <- rep(NA_real_, n)
+    for (t in (k + 1):n) directa[t] <- mean(y[(t - k):(t - 1)])
+    dif_mm <- max(dif_mm, max(abs(ajustar_mm(y, k)$yhat - directa), na.rm = TRUE) / esc)
+    if (2 * k - 1 <= n) {                               # DMM (un recorrido) vs definición directa
+      mm <- rep(NA_real_, n); for (t in k:n) mm[t] <- mean(y[(t - k + 1):t])
+      dm <- rep(NA_real_, n); for (t in (2 * k - 1):n) dm[t] <- mean(mm[(t - k + 1):t])
+      yh <- c(NA, (2 * mm - dm + 2 / (k - 1) * (mm - dm))[-n])
+      dif_dmm <- max(dif_dmm, max(abs(ajustar_dmm(y, k)$yhat - yh), na.rm = TRUE) / esc)
+    }
+  }
+  for (a in c(0.05, 0.15, 0.5, 0.98)) {                 # SES vs promedio ponderado finito
+    f <- ajustar_ses(y, a)
+    pond <- vapply(2:n, function(t) {
+      i <- 0:(t - 2)
+      a * sum((1 - a)^i * y[t - i]) + (1 - a)^(t - 1) * y[1]
+    }, 0)
+    suma_pesos <- vapply(2:n, function(t) a * sum((1 - a)^(0:(t - 2))) + (1 - a)^(t - 1), 0)
+    dif_pesos <- max(dif_pesos, max(abs(suma_pesos - 1)))
+    dif_ses <- max(dif_ses, max(abs(c(f$yhat[3:n], f$parametros$siguiente) - pond)) / esc)
+  }
+  for (ab in list(c(0.1, 0.1), c(0.3, 0.4), c(0.9, 0.05))) {   # Holt vs forma de corrección de error
+    f <- ajustar_holt(y, ab[1], ab[2])
+    e <- y - f$yhat; L <- f$parametros$nivel; Tt <- f$parametros$pendiente; t <- 2:n
+    dif_holt <- max(dif_holt, max(abs(L[t] - (L[t - 1] + Tt[t - 1] + ab[1] * e[t])),
+                                  abs(Tt[t] - (Tt[t - 1] + ab[1] * ab[2] * e[t]))) / esc)
+  }
+}
+```
+
+Tercero, los coeficientes de las tendencias contra `lm()` y las cifras publicadas en las notas de la Clase 3
+(precios de cierre) y de la Clase 4 (créditos al consumo):
+
+```{r}
+#| label: verif-lm-notas
+# Tendencias: coeficientes contra lm()
+dif_lm <- 0
+for (cs in list(list(LakeHuron, "lineal"), list(airmiles, "cuadratica"), list(airmiles, "exponencial"),
+                list(JohnsonJohnson, "exponencial"), list(Nile, "cuadratica"))) {
+  y <- as.numeric(cs[[1]]); t <- seq_along(y)
+  fit_lm <- switch(cs[[2]], lineal = lm(y ~ t), cuadratica = lm(y ~ t + I(t^2)), exponencial = lm(log(y) ~ t))
+  dif_lm <- max(dif_lm, max(abs(unname(ajustar_tendencia(y, cs[[2]])$parametros$coef) - unname(coef(fit_lm)))))
+}
+
+# Cifras publicadas en las notas: Clase 3 (precios de cierre, mayo-diciembre) y Clase 4
+# (créditos al consumo, once meses). Las notas publican 4 cifras significativas o 2 decimales,
+# por eso la tolerancia es media unidad de la última cifra publicada.
+precio <- c(18.43, 19.98, 19.51, 20.63, 19.78, 21.25, 21.18, 22.14)
+credito <- c(133, 155, 165, 171, 194, 231, 274, 312, 313, 333, 343)
+m_mm3 <- medidas(precio, ajustar_mm(precio, 3)$yhat, precio)
+ses15 <- ajustar_ses(precio, 0.15); yh_ses <- ses15$yhat; yh_ses[2:3] <- NA   # origen común t = 4
+m_ses15 <- medidas(precio, yh_ses, precio)
+f_dmm3 <- ajustar_dmm(credito, 3); m_dmm3 <- medidas(credito, f_dmm3$yhat, credito)
+f_holt <- ajustar_holt(credito, 0.3, 0.4); m_holt <- medidas(credito, f_holt$yhat, credito)
+
+verif <- do.call(rbind, list(
+  fila_v("ACF a mano vs acf() (7 series, 2 valores de m)", dif_acf, 1e-12),
+  fila_v("Banda vs qnorm(0,975)/sqrt(n.used) de plot.acf", dif_banda, 1e-12),
+  fila_v("Q de Ljung-Box vs Box.test, p = 0..3 (relativa)", dif_Q, 1e-12),
+  fila_v("Valor p de Ljung-Box vs Box.test con fitdf = p", dif_Qp, 1e-12),
+  fila_v("MM recursiva vs directa, k = 2..12 (relativa)", dif_mm, 1e-12),
+  fila_v("SES vs promedio ponderado finito (relativa)", dif_ses, 1e-12),
+  fila_v("SES: los pesos suman 1", dif_pesos, 1e-12),
+  fila_v("DMM un recorrido vs definición directa (relativa)", dif_dmm, 1e-12),
+  fila_v("Holt vs forma de corrección de error (relativa)", dif_holt, 1e-12),
+  fila_v("Coeficientes de las tendencias vs lm()", dif_lm, 1e-8),
+  fila_v("Clase 3: MM(3) MSE, MAD y MAPE", max(abs(c(m_mm3$MSE - 1.1621, m_mm3$MAD - 0.9780, (m_mm3$MAPE - 4.607) / 10))), 5e-5),
+  fila_v("Clase 3: SES(0,15) en origen común, MSE", abs(m_ses15$MSE - 3.3706), 5e-5),
+  fila_v("Clase 4: DMM(3) MSE y pronósticos", max(abs(c(m_dmm3$MSE - 841.24, f_dmm3$pronosticar(3) - c(356.56, 370.00, 383.44)))), 5e-3),
+  fila_v("Clase 4: Holt(0,3; 0,4) MSE y pronósticos", max(abs(c(m_holt$MSE - 1133.08, f_holt$pronosticar(3) - c(387.15, 414.97, 442.80)))), 5e-3)
+))
+verif_imp <- verif; verif_imp$dif <- format(verif$dif, digits = 3, scientific = TRUE)
+verif_imp$tol <- format(verif$tol, scientific = TRUE)
+stopifnot("alguna verificación del Bloque 0 superó su tolerancia" = all(verif$ok))
+
+verif_imp  # la tabla, como última expresión del chunk
+```
+
+Las `r nrow(verif)` verificaciones pasan: la mayor diferencia relativa de las equivalencias es
+`r cient(max(verif$dif[5:9]), 3)`, la de los coeficientes contra `lm()` es
+`r cient(verif$dif[10], 3)` (tolerancia $10^{-8}$) y las cifras de las notas se
+reproducen dentro de media unidad de la última cifra publicada.
