@@ -158,3 +158,47 @@ ajustar_mm <- function(y, k) {
     n_param = 1L
   )
 }
+
+# ---- ajustar_ses ----------------------------------------------------------------------
+
+#' ajustar_ses(y, alpha)
+#'
+#' Descripción: suavizamiento exponencial simple: el pronóstico corrige el anterior con una
+#'   fracción alpha del último error (nivel local con pesos geométricos decrecientes).
+#'
+#' Ecuaciones (forma de corrección de error):
+#'   e_t = Y_t - Yhat_t,   Yhat_{t+1} = Yhat_t + alpha e_t.
+#'   Equivale al promedio ponderado finito de esta inicialización:
+#'   Yhat_{t+1} = alpha sum_{i=0}^{t-2} (1 - alpha)^i Y_{t-i} + (1 - alpha)^{t-1} Y_1,
+#'   con pesos que suman 1.
+#'
+#' Inicialización: Yhat_2 = Y_1.
+#' Calentamiento: yhat[1] = NA; yhat[2] = Y_1.
+#' Pronóstico extramuestral: rep(Yhat_{T+1}, h), con Yhat_{T+1} = alpha Y_T + (1 - alpha) Yhat_T.
+#'
+#' @param y      vector numérico ordenado, sin NA.
+#' @param alpha  constante de suavizamiento, estrictamente entre 0 y 1.
+#' @return objeto de clase "metodo_pronostico". En parametros: alpha y siguiente
+#'   (Yhat_{T+1}). n_param = 1 (se estima alpha).
+#'
+#' Referencia: Clase 3, suavizamiento exponencial simple.
+ajustar_ses <- function(y, alpha) {
+  y <- .validar_serie(y)
+  stopifnot("alpha debe ser un número en el intervalo (0, 1)" = .es_constante(alpha))
+
+  n <- length(y)
+  yhat <- rep(NA_real_, n)
+  pron <- y[1]                             # Yhat_2 = Y_1
+  yhat[2] <- pron
+  for (t in 2:n) {
+    pron <- pron + alpha * (y[t] - pron)   # Yhat_{t+1} = Yhat_t + alpha e_t
+    if (t < n) yhat[t + 1L] <- pron
+  }                                        # al salir, pron = Yhat_{T+1}
+
+  .nuevo_metodo(
+    metodo = sprintf("SES (alpha = %s)", format(alpha)), y = y, yhat = yhat,
+    pronosticar = .pronosticador_constante(pron),
+    parametros = list(alpha = alpha, siguiente = pron),
+    n_param = 1L
+  )
+}
