@@ -420,3 +420,35 @@ for (p in list(ve$t_media, ve$ljung_box, ve$jarque_bera, ve$durbin_watson)) .lin
 .guardar_fig(.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 7. Tendencia exponencial: ajuste y pronóstico", nombre_referente = "Referente ingenuo estacional"),
              "ej07-tendencia-exponencial-johnsonjohnson-pronostico.png")
 resumen[[7]] <- .fila_resumen(7, "JohnsonJohnson", fit, m_val, m_ref)
+
+# ======================================================================================
+# Ejemplo 8. Holt sobre austres
+# ======================================================================================
+cat("\n== Ejemplo 8: Holt sobre austres ==\n")
+# Misma serie del ejemplo 4: d, est y val se vuelven a cargar porque el ejemplo 7 los reemplazó.
+d <- leer_serie(austres,
+                fuente = "Brockwell PJ, Davis RA (1996). Introduction to Time Series and Forecasting. Springer (paquete datasets, austres)",
+                unidad = "Residentes de Australia (miles)")
+n_total <- nrow(d); h <- min(12, floor(0.2 * n_total)); T_est <- n_total - h
+est <- d[seq_len(T_est), ]; val <- d[T_est + seq_len(h), ]
+cat(sprintf("T = %d, h = %d, T_est = %d; corte entre %s y %s\n", n_total, h, T_est, d$fecha[T_est], d$fecha[T_est + 1]))
+.guardar_fig(graficar_serie(d, "Ejemplo 8. Residentes de Australia, trimestral"), "ej08-holt-austres-serie.png")
+cg <- correlograma(d)
+.guardar_fig(cg$grafico, "ej08-holt-austres-correlograma.png", alto = 6)
+
+opt <- optimizar(est$y, "holt")
+cat(sprintf("Óptimo: alpha = %s, beta = %s (MSE = %s); en el borde de la rejilla: %s\n", format(opt$optimo$alpha),
+            format(opt$optimo$beta), .fmt_num(opt$optimo$mse), opt$en_borde))
+.guardar_fig(opt$grafico, "ej08-holt-austres-optimizacion.png")
+fit <- ajustar_holt(est$y, opt$optimo$alpha, opt$optimo$beta)
+pron <- fit$pronosticar(h); ref <- rep(est$y[T_est], h)
+m_in <- .medir(est$y, fit$yhat, est$y); m_val <- .medir(val$y, pron, est$y); m_ref <- .medir(val$y, ref, est$y)
+print(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo"), digits = 5, row.names = FALSE)
+cot <- .cotas("ej08", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+cat(sprintf("Validación de errores (N = %d):\n", ve$n))
+for (p in list(ve$t_media, ve$ljung_box, ve$jarque_bera, ve$durbin_watson)) .linea(p)
+.guardar_fig(ve$grafico, "ej08-holt-austres-errores.png", alto = 7)
+.guardar_fig(.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 8. Holt: ajuste y pronóstico"),
+             "ej08-holt-austres-pronostico.png")
+resumen[[8]] <- .fila_resumen(8, "austres", fit, m_val, m_ref)
