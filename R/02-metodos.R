@@ -457,3 +457,123 @@ ajustar_holt <- function(y, alpha, beta) {
     n_param = 2L
   )
 }
+
+# ---- optimizar ------------------------------------------------------------------------
+
+#' optimizar(y, metodo, rejilla = NULL)
+#'
+#' Descripción: elige la ventana o las constantes de un método buscando en una rejilla el
+#'   valor que minimiza el MSE de un paso DENTRO del tramo de estimación. Como recibe solo
+#'   el tramo de estimación, el tramo de validación no se toca nunca.
+#'
+#' Criterio: MSE = mean(e_t^2), con e_t = Y_t - Yhat_t, sobre t = origen, ..., T.
+#'   Origen común: para que ventanas distintas se comparen sobre los MISMOS errores, el
+#'   MSE de todas las filas se calcula desde el primer período en que la ventana más
+#'   exigente de la rejilla ya produce pronóstico (Clase 3: «todos los métodos empiezan
+#'   donde empieza el más exigente»). Sin esto, k = 2 promediaría más errores que k = 12 y
+#'   el MSE no sería comparable.
+#'     mm:   origen = max(k) + 1      (t = 13 con la rejilla por defecto, k <= 12)
+#'     dmm:  origen = 2 max(k)        (t = 24 con la rejilla por defecto)
+#'     ses, holt: origen = 2          (el primer pronóstico es Yhat_2 = Y_1 para toda la
+#'                                     rejilla; todos los pares empiezan en el mismo t)
+#'   Empates: gana la primera fila de la rejilla (which.min), es decir, la constante o la
+#'   ventana más pequeña de la rejilla.
+#'
+#' Rejillas por defecto (las del enunciado):
+#'   mm, dmm: k = 2:12
+#'   ses:     alpha = seq(0.02, 0.98, by = 0.02)
+#'   holt:    expand.grid(alpha = seq(0.05, 0.95, 0.05), beta = seq(0.05, 0.95, 0.05))
+#'
+#' @param y        vector numérico del tramo de estimación, sin NA.
+#' @param metodo   "mm", "dmm", "ses" o "holt".
+#' @param rejilla  data.frame / tibble con una columna por parámetro (k; alpha; alpha y
+#'                 beta); NULL usa la rejilla por defecto del método.
+#' @return lista con: metodo, rejilla (tibble con los parámetros y la columna mse), optimo
+#'   (tibble de una fila con el parámetro ganador y su mse), origen (primer t usado), n_err
+#'   (número de errores en cada MSE), en_borde (TRUE si el óptimo cae en el mínimo o el
+#'   máximo de algún parámetro de la rejilla) y grafico (ggplot: curva MSE contra k o
+#'   alpha, o mapa de calor en (alpha, beta), con el óptimo marcado).
+#'   Un óptimo en el borde se interpreta en el informe: la rejilla no contiene el mínimo.
+#'
+#' Referencia: Clase 3 (origen común); enunciado 2(c).
+optimizar <- function(y, metodo = c("mm", "dmm", "ses", "holt"), rejilla = NULL) {
+  metodo <- match.arg(metodo)
+  y <- .validar_serie(y)
+  n <- length(y)
+
+  columnas <- switch(metodo, mm = "k", dmm = "k", ses = "alpha", holt = c("alpha", "beta"))
+  if (is.null(rejilla)) {
+    rejilla <- switch(metodo,
+      mm = , dmm = data.frame(k = 2:12),
+      ses = data.frame(alpha = seq(0.02, 0.98, by = 0.02)),
+      holt = expand.grid(alpha = seq(0.05, 0.95, by = 0.05), beta = seq(0.05, 0.95, by = 0.05))
+    )
+  }
+  stopifnot(
+    "rejilla debe ser un data.frame" = is.data.frame(rejilla),
+    "la rejilla no tiene exactamente las columnas que pide el método" = setequal(names(rejilla), columnas),
+    "la rejilla no puede estar vacía" = nrow(rejilla) > 0L
+  )
+  rejilla <- tibble::as_tibble(rejilla)[, columnas]    # columnas en el orden del método
+
+  origen <- switch(metodo,
+    mm = max(rejilla$k) + 1, dmm = 2 * max(rejilla$k), ses = 2, holt = 2
+  )
+  stopifnot("y es demasiado corta para el origen común de esta rejilla" = n >= origen)
+  desde <- origen:n
+
+  ajustar <- function(fila) {
+    switch(metodo,
+      mm = ajustar_mm(y, rejilla$k[fila]), dmm = ajustar_dmm(y, rejilla$k[fila]),
+      ses = ajustar_ses(y, rejilla$alpha[fila]),
+      holt = ajustar_holt(y, rejilla$alpha[fila], rejilla$beta[fila])
+    )
+  }
+  rejilla$mse <- vapply(seq_len(nrow(rejilla)), function(i) mean(ajustar(i)$errores[desde]^2), 0)
+
+  optimo <- rejilla[which.min(rejilla$mse), ]
+  en_borde <- any(vapply(columnas, function(col) {
+    valores <- unique(rejilla[[col]])
+    length(valores) > 1L && optimo[[col]] %in% range(valores)   # una columna constante no cuenta
+  }, logical(1)))
+
+  list(
+    metodo = metodo, rejilla = rejilla, optimo = optimo, origen = origen,
+    n_err = length(desde), en_borde = en_borde,
+    grafico = .grafico_optimizar(rejilla, optimo, metodo, origen, length(desde))
+  )
+}
+
+# Figura de optimizar(): curva del MSE contra el parámetro (mm, dmm, ses) o mapa de calor
+# en (alpha, beta) (holt), con el óptimo marcado y subtítulo con su valor.
+.grafico_optimizar <- function(rejilla, optimo, metodo, origen, n_err) {
+  nombre <- c(mm = "Media móvil", dmm = "Doble media móvil", ses = "Suavizamiento exponencial simple",
+              holt = "Holt lineal")[[metodo]]
+  caption <- sprintf("MSE de un paso en el tramo de estimación, sobre los %d errores desde t = %d (origen común)",
+                     n_err, origen)
+  if (metodo == "holt") {
+    subtitulo <- sprintf("Óptimo: \u03b1 = %s, \u03b2 = %s (MSE = %s)", .fmt_num(optimo$alpha, 2),
+                         .fmt_num(optimo$beta, 2), .fmt_num(optimo$mse))
+    g <- ggplot2::ggplot(rejilla, ggplot2::aes(x = alpha, y = beta, fill = mse)) +
+      ggplot2::geom_tile() +
+      ggplot2::geom_point(data = optimo, shape = 21, size = 3.5, stroke = 1.2,
+                          colour = "black", fill = "white") +
+      ggplot2::scale_fill_viridis_c(direction = -1, name = "MSE") +
+      ggplot2::labs(x = "\u03b1 (nivel)", y = "\u03b2 (tendencia)")
+  } else {
+    col <- if (metodo == "ses") "alpha" else "k"
+    etiqueta <- if (metodo == "ses") "Constante de suavizamiento \u03b1" else "Ventana k"
+    valor <- optimo[[col]]
+    subtitulo <- sprintf("Óptimo: %s = %s (MSE = %s)", if (col == "k") "k" else "\u03b1",
+                         if (col == "k") format(valor) else .fmt_num(valor, 2), .fmt_num(optimo$mse))
+    d <- rejilla; d$x <- rejilla[[col]]; o <- optimo; o$x <- optimo[[col]]   # columna x común
+    g <- ggplot2::ggplot(d, ggplot2::aes(x = x, y = mse)) +
+      ggplot2::geom_line(colour = "grey40") +
+      ggplot2::geom_point(colour = "grey40", size = 1.6) +
+      ggplot2::geom_point(data = o, colour = "#c0392b", size = 3.5) +
+      ggplot2::labs(x = etiqueta, y = "MSE de un paso")
+    if (col == "k") g <- g + ggplot2::scale_x_continuous(breaks = rejilla$k)
+  }
+  g + ggplot2::labs(title = sprintf("Optimización: %s", nombre), subtitle = subtitulo, caption = caption) +
+    .tema_tarea()
+}
