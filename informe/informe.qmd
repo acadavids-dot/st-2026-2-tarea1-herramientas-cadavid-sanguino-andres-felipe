@@ -778,3 +778,179 @@ la precisión: en los `r h` años de validación el error absoluto máximo fue d
 gráfica de optimización muestra que el MSE apenas mejora en torno al óptimo y el ruido propio de la serie
 (desviación estándar `r n2(sd(d$y))`) domina; acotarlo probablemente exigiría variables explicativas que este
 método no usa.
+
+# Ejemplo 4. Doble media móvil sobre `austres`
+
+## Descripción de la serie
+
+```{r}
+#| label: ej4-datos
+x <- austres
+d <- leer_serie(x,
+                fuente = "Brockwell PJ, Davis RA (1996). Introduction to Time Series and Forecasting. Springer (paquete datasets, austres)",
+                unidad = "Residentes de Australia (miles)")
+descripcion(x, "austres", d)
+```
+
+La serie cuenta los residentes de Australia cada trimestre. Ojo con el rango: `help(austres)` dice «from March 1971 to
+March 1994», pero los datos que contiene el objeto, verificados con `start()`, `end()` y `length()` en la tabla anterior,
+van de `r format(d$fecha[1])` a `r format(d$fecha[nrow(d)])` (`r nrow(d)` trimestres). Todo el análisis usa lo que
+verifica el código, no lo que dice la descripción.
+
+## Patrón de la serie
+
+```{r}
+#| label: ej4-serie
+graficar_serie(d, "Ejemplo 4. Residentes de Australia, trimestral")
+```
+
+```{r}
+#| label: ej4-correlograma
+#| fig-height: 6
+cg <- correlograma(d)
+cg$grafico
+```
+
+```{r}
+#| label: ej4-pruebas-serie
+#| results: asis
+n_total <- nrow(d)
+r_1 <- .contraste_rh(cg$acf, n_total, 1)
+pp(r_1, paste0("r_1 = ", n4(cg$acf[1]), ", casi 1 y muy por encima de la banda de ±", n4(cg$banda), ": cada trimestre ",
+               "repite casi entero al anterior, lo que ocurre cuando la serie está dominada por un nivel que crece."))
+r_m <- .contraste_rh(cg$acf, n_total, cg$m)
+pp(r_m, paste0("Aun en el último rezago calculado (h = ", cg$m, ") la autocorrelación vale ", n4(cg$acf[cg$m]),
+               ", por encima de la banda: los ", cg$m, " rezagos salen de ella y la ACF decae en línea casi recta, sin acercarse a cero. ",
+               "Una serie estacionaria en media se acerca a cero en pocos rezagos; esta no, luego tiene tendencia."))
+lb0 <- ljung_box(cg$acf, n_total, cg$m, 0)
+pp(lb0, paste0("Q = ", n4(lb0$estadistico), " con ", lb0$gl, " grados de libertad y valor p ", pv(lb0$valor_p),
+               ": rechazo contundente. No es ruido blanco ni nada parecido."))
+```
+
+**Lectura del patrón.** La serie es una recta muy limpia: una regresión lineal sobre $t$ explica el
+`r n2(100 * cor(seq_len(n_total), d$y)^2)` % de la variación y el crecimiento medio por trimestre es
+`r n2(mean(diff(d$y)))` miles de residentes. No hay pico en el rezago 4: `r n4(cg$acf[4])` queda entre los `r n4(cg$acf[3])`
+del rezago 3 y los `r n4(cg$acf[5])` del 5, de modo que la estacionalidad, si existe, es ínfima frente a la tendencia. La
+pendiente no es exactamente constante: el crecimiento medio por trimestre fue de
+`r n2(mean(diff(d$y[1:45])))` en la primera mitad y de `r n2(mean(diff(d$y[45:n_total])))` en la segunda. Eso es lo que
+justifica una doble media móvil: una tendencia lineal por tramos, cuya pendiente se redefine conforme entra información,
+en lugar de una sola recta para toda la serie.
+
+## Partición
+
+```{r}
+#| label: ej4-particion
+h <- min(12, floor(0.2 * n_total)); T_est <- n_total - h
+est <- d[seq_len(T_est), ]; val <- d[T_est + seq_len(h), ]
+```
+
+Con $T = `r n_total`$ y $h = `r h`$ (tres años), el tramo de estimación va de `r format(est$fecha[1])` a
+`r format(est$fecha[T_est])` ($T_{est} = `r T_est`$) y el de validación de `r format(val$fecha[1])` a
+`r format(val$fecha[h])`.
+
+## Optimización de la ventana
+
+La ventana $k$ se elige con `optimizar()` sobre $k = 2, \dots, 12$. La doble media móvil necesita $2k - 1$ datos antes
+de su primer pronóstico, así que el origen común es $t = 24$, el primero que la ventana de 12 puede pronosticar.
+
+```{r}
+#| label: ej4-optimizar
+opt <- optimizar(est$y, "dmm")
+opt$grafico
+tab(opt$rejilla, 2)
+```
+
+El óptimo es $k =$ `r opt$optimo$k` con MSE `r n4(opt$optimo$mse)`, sobre `r opt$n_err` errores desde
+$t =$ `r opt$origen`. **El óptimo cae en el borde de la rejilla** (`r opt$en_borde`): $k = 2$ es la ventana más corta que
+admite el método (con $k = 1$ el factor $2/(k-1)$ no está definido). El MSE crece de forma monótona con $k$, hasta
+`r n2(max(opt$rejilla$mse) / min(opt$rejilla$mse))` veces el óptimo en $k = 12$. Significa que la serie es casi determinista y que su pendiente
+cambia lentamente: una ventana larga promedia pendientes viejas y llega tarde al cambio, mientras que la más corta
+reacciona de inmediato y, como el ruido es muy pequeño frente a la señal, casi no paga costo por ello.
+
+## Ajuste y medidas
+
+```{r}
+#| label: ej4-ajuste
+fit <- ajustar_dmm(est$y, opt$optimo$k)
+pron <- fit$pronosticar(h)
+ref <- rep(est$y[T_est], h)                       # ingenuo: el último valor observado
+m_in <- .medir(est$y, fit$yhat, est$y)            # un paso, dentro del tramo de estimación
+m_val <- .medir(val$y, pron, est$y)               # h pronósticos sobre el tramo de validación
+m_ref <- .medir(val$y, ref, est$y)                # el ingenuo, mismo tramo y mismo h
+tab(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo"))
+```
+
+La doble media móvil supera al ingenuo por un margen amplio: MASE de validación `r n4(m_val$MASE)` contra
+`r n4(m_ref$MASE)`, y un MSE de `r n2(m_val$MSE)` contra `r n2(m_ref$MSE)` (`r n2(100 * (1 - m_val$MSE / m_ref$MSE))` % menos).
+Es lo esperable: el ingenuo repite el último valor y se queda quieto mientras la serie sigue creciendo, y el método
+extrapola la pendiente. El MASE de validación es mayor que uno porque se escala con el error del ingenuo de *un paso* dentro
+de la muestra (`r n4(attr(m_in, "escala_mase"))`), que es mucho menor que el de un ingenuo a doce trimestres; la comparación
+que corresponde es la de la última fila.
+
+## Validación de los errores de un paso
+
+```{r}
+#| label: ej4-validacion
+#| fig-height: 7
+cot <- .cotas("ej04", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+ve$grafico
+```
+
+Son $N = `r ve$n`$ errores de un paso ($2k - 1 = `r 2 * opt$optimo$k - 1`$ trimestres quedan sin pronóstico), con
+$m = `r ve$correlograma$m`$ rezagos y banda de ±`r n4(ve$correlograma$banda)`, calculada sobre $N$.
+
+```{r}
+#| label: ej4-pruebas-errores
+#| results: asis
+pp(ve$t_media, paste0("El error medio es ", n4(mean(ve$e)), " sobre una desviación de ", n4(sd(ve$e)),
+                      ": no se distingue de cero, así que el método no sobrestima ni subestima en promedio dentro de la muestra."))
+pp(ve$ljung_box, paste0("Q = ", n4(ve$ljung_box$estadistico), " con ", ve$ljung_box$gl, " grados de libertad (m = ",
+                        ve$correlograma$m, ", p = 1 porque se estimó k) y valor p ", pv(ve$ljung_box$valor_p),
+                        ": se rechaza con claridad que los errores sean incorrelacionados. ",
+                        sum(abs(ve$correlograma$acf) > ve$correlograma$banda), " de los ", ve$correlograma$m,
+                        " rezagos salen de la banda, y lo hacen en un patrón alterno: r_2 = ", n4(ve$correlograma$acf[2]),
+                        ", r_4 = ", n4(ve$correlograma$acf[4]), ", r_6 = ", n4(ve$correlograma$acf[6]),
+                        ". Negativo en 2, positivo en 4, negativo en 6 es el rastro de un ciclo de período 4: es compatible con una ",
+                        "pequeña estacionalidad trimestral que la tendencia ocultaba en la serie original y que queda a la vista ",
+                        "cuando se quita (no se probó de forma separada). Es minúscula (la desviación de los errores es ", n2(100 * sd(ve$e) / mean(est$y)),
+                        " % del nivel medio), pero el método no la modela."))
+pp(ve$jarque_bera, paste0("JB = ", n4(ve$jarque_bera$estadistico), " con asimetría ", n4(ve$jarque_bera$A), " y curtosis ",
+                          n4(ve$jarque_bera$K), ": no hay evidencia contra la normalidad de los errores."))
+pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " supera d_U = ", n2(cot$dU), " (N = ", ve$n,
+                            ", k' = 1): no se rechaza la autocorrelación positiva de orden uno, con r_1 = ", n4(ve$correlograma$acf[1]),
+                            ". Durbin–Watson y Ljung–Box no se contradicen: el primero mira solo el rezago 1, donde no hay ",
+                            "problema, y el segundo ve la estructura de los rezagos 2, 4 y 6."))
+```
+
+## Gráfico final
+
+```{r}
+#| label: ej4-final
+.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 4. Doble media móvil: ajuste y pronóstico")
+```
+
+## Conclusión
+
+Se ajustó una doble media móvil con $k =$ `r opt$optimo$k`, elegida por `optimizar()` (MSE de un paso
+`r n4(opt$optimo$mse)`, en el borde de la rejilla), sobre los `r T_est` trimestres de estimación. Dentro de la muestra, a
+un paso, el MSE es `r n4(m_in$MSE)`, el MAD `r n4(m_in$MAD)` y el MASE `r n4(m_in$MASE)` sobre `r m_in$N` errores. En los
+`r h` trimestres de validación el MSE es `r n4(m_val$MSE)`, el MAD `r n4(m_val$MAD)` y el MASE `r n4(m_val$MASE)`, frente a
+`r n4(m_ref$MSE)`, `r n4(m_ref$MAD)` y `r n4(m_ref$MASE)` del ingenuo: el método reduce el MSE del ingenuo en
+`r n2(100 * (1 - m_val$MSE / m_ref$MSE))` %. La validación de errores tiene resultados mixtos: error medio nulo (valor p
+`r pv(ve$t_media$valor_p)`), errores normales (Jarque–Bera, valor p `r pv(ve$jarque_bera$valor_p)`) y sin autocorrelación de orden
+uno (Durbin–Watson `r n4(ve$durbin_watson$estadistico)` frente a $d_U =$ `r n2(cot$dU)`), pero Ljung–Box rechaza
+(valor p `r pv(ve$ljung_box$valor_p)`) por la estructura de período 4 de los rezagos pares. En validación el método
+sobrestimó los `r sum(val$y - pron < 0)` trimestres de `r h`, con un error medio (observado menos pronóstico) de
+`r n2(mean(val$y - pron))` miles de residentes.
+
+## Recomendación
+
+El pronóstico le sirve a quien planee con la población de Australia, por ejemplo para dimensionar servicios, con un
+horizonte de uno a cuatro trimestres, donde el error es pequeño. El límite es que extrapola la pendiente de los
+últimos dos trimestres (`r n2(fit$parametros$pendiente[T_est])` miles por trimestre) y esa pendiente se estima con muy
+poca información: en validación el error crece de `r n2(abs(val$y[1] - pron[1]))` en $h = 1$
+(`r n2(100 * abs(val$y[1] - pron[1]) / val$y[1])` % del valor observado) a `r n2(abs(val$y[h] - pron[h]))` en $h = `r h`$
+(`r n2(100 * abs(val$y[h] - pron[h]) / val$y[h])` %), unos `r n2((abs(val$y[h] - pron[h]) - abs(val$y[1] - pron[1])) / (h - 1))`
+miles más por cada trimestre de horizonte, porque la población creció menos de lo que la pendiente vigente proyectaba. A
+tres años el pronóstico ya se desvía de forma sistemática; más allá de un año conviene reestimar con cada dato nuevo.
