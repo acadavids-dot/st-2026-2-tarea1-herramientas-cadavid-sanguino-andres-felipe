@@ -193,3 +193,31 @@ verif_imp$tol <- format(verif$tol, scientific = TRUE)
 print(verif_imp, row.names = FALSE, right = FALSE)
 stopifnot("alguna verificación del Bloque 0 superó su tolerancia" = all(verif$ok))
 cat("Bloque 0: todas las verificaciones pasan.\n")
+
+# ======================================================================================
+# Ejemplo 1. Media simple sobre discoveries
+# ======================================================================================
+cat("\n== Ejemplo 1: media simple sobre discoveries ==\n")
+d <- leer_serie(discoveries,
+                fuente = "The World Almanac and Book of Facts, 1975 Edition, pages 315-318 (paquete datasets, discoveries)",
+                unidad = "Descubrimientos importantes por año (número)")
+n_total <- nrow(d); h <- min(12, floor(0.2 * n_total)); T_est <- n_total - h
+est <- d[seq_len(T_est), ]; val <- d[T_est + seq_len(h), ]
+cat(sprintf("T = %d, h = %d, T_est = %d; corte entre %s y %s\n", n_total, h, T_est, d$fecha[T_est], d$fecha[T_est + 1]))
+.guardar_fig(graficar_serie(d, "Ejemplo 1. Descubrimientos importantes por año, 1860-1959"), "ej01-media-discoveries-serie.png")
+cg <- correlograma(d)
+.guardar_fig(cg$grafico, "ej01-media-discoveries-correlograma.png", alto = 6)
+.linea(ljung_box(cg$acf, n_total, cg$m, 0))
+
+fit <- ajustar_media(est$y)
+pron <- fit$pronosticar(h); ref <- rep(est$y[T_est], h)
+m_in <- .medir(est$y, fit$yhat, est$y); m_val <- .medir(val$y, pron, est$y); m_ref <- .medir(val$y, ref, est$y)
+print(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo"), digits = 5, row.names = FALSE)
+cot <- .cotas("ej01", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+cat(sprintf("Validación de errores (N = %d):\n", ve$n))
+for (p in list(ve$t_media, ve$ljung_box, ve$jarque_bera, ve$durbin_watson)) .linea(p)
+.guardar_fig(ve$grafico, "ej01-media-discoveries-errores.png", alto = 7)
+.guardar_fig(.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 1. Media simple: ajuste y pronóstico"),
+             "ej01-media-discoveries-pronostico.png")
+resumen[[1]] <- .fila_resumen(1, "discoveries", fit, m_val, m_ref)
