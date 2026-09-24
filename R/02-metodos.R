@@ -402,3 +402,58 @@ ajustar_tendencia <- function(y, tipo = c("lineal", "cuadratica", "exponencial")
     parametros = parametros, n_param = p
   )
 }
+
+# ---- ajustar_holt ---------------------------------------------------------------------
+
+#' ajustar_holt(y, alpha, beta)
+#'
+#' Descripción: suavizamiento exponencial lineal de Holt; nivel y pendiente locales que se
+#'   actualizan en cada período. Es el método para una tendencia que cambia con el tiempo.
+#'
+#' Ecuaciones (Definición 4 de la Clase 4), con Yhat_t = L_{t-1} + That_{t-1}:
+#'   L_t    = alpha Y_t + (1 - alpha) Yhat_t
+#'   That_t = beta (L_t - L_{t-1}) + (1 - beta) That_{t-1}
+#'   Yhat_{t+1} = L_t + That_t.
+#'   Forma de corrección de error (Proposición 10), con e_t = Y_t - Yhat_t:
+#'   L_t = L_{t-1} + That_{t-1} + alpha e_t,   That_t = That_{t-1} + alpha beta e_t.
+#'   El error entra al nivel con peso alpha y a la pendiente con alpha beta.
+#'   Se calcula con la primera forma; la segunda se usa para verificar.
+#'
+#' Inicialización: L_1 = Y_1, That_1 = 0.
+#' Calentamiento: yhat[1] = NA; yhat[2] = L_1 + That_1 = Y_1.
+#' Pronóstico extramuestral: Yhat_{T+h} = L_T + That_T h.
+#'
+#' @param y      vector numérico ordenado, sin NA.
+#' @param alpha  constante del nivel, estrictamente entre 0 y 1.
+#' @param beta   constante de la pendiente, estrictamente entre 0 y 1.
+#' @return objeto de clase "metodo_pronostico". En parametros: alpha, beta, nivel (L_t) y
+#'   pendiente (That_t), de largo T. n_param = 2 (se estiman alpha y beta).
+#'
+#' Referencia: Clase 4, Parte VIII (Holt).
+ajustar_holt <- function(y, alpha, beta) {
+  y <- .validar_serie(y)
+  stopifnot(
+    "alpha debe ser un número en el intervalo (0, 1)" = .es_constante(alpha),
+    "beta debe ser un número en el intervalo (0, 1)" = .es_constante(beta)
+  )
+
+  n <- length(y)
+  yhat <- rep(NA_real_, n)
+  nivel <- numeric(n)
+  pendiente <- numeric(n)
+  nivel[1] <- y[1]
+  pendiente[1] <- 0
+  yhat[2] <- nivel[1] + pendiente[1]
+  for (t in 2:n) {
+    nivel[t] <- alpha * y[t] + (1 - alpha) * yhat[t]
+    pendiente[t] <- beta * (nivel[t] - nivel[t - 1L]) + (1 - beta) * pendiente[t - 1L]
+    if (t < n) yhat[t + 1L] <- nivel[t] + pendiente[t]
+  }
+
+  .nuevo_metodo(
+    metodo = sprintf("Holt (alpha = %s, beta = %s)", format(alpha), format(beta)),
+    y = y, yhat = yhat, pronosticar = .pronosticador_lineal(nivel[n], pendiente[n]),
+    parametros = list(alpha = alpha, beta = beta, nivel = nivel, pendiente = pendiente),
+    n_param = 2L
+  )
+}
