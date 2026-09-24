@@ -344,3 +344,37 @@ for (p in list(ve$t_media, ve$ljung_box, ve$jarque_bera, ve$durbin_watson)) .lin
 .guardar_fig(.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 5. Tendencia lineal: ajuste y pronóstico"),
              "ej05-tendencia-lineal-lakehuron-pronostico.png")
 resumen[[5]] <- .fila_resumen(5, "LakeHuron", fit, m_val, m_ref)
+
+# ======================================================================================
+# Ejemplo 6. Tendencia cuadrática sobre airmiles
+# ======================================================================================
+cat("\n== Ejemplo 6: tendencia cuadrática sobre airmiles ==\n")
+d <- leer_serie(airmiles,
+                fuente = "F.A.A. Statistical Handbook of Aviation (paquete datasets, airmiles)",
+                unidad = "Millas-pasajero de ingreso (revenue passenger miles), aerolíneas comerciales de EE. UU.")
+n_total <- nrow(d); h <- min(12, floor(0.2 * n_total)); T_est <- n_total - h
+est <- d[seq_len(T_est), ]; val <- d[T_est + seq_len(h), ]
+cat(sprintf("T = %d, h = %d, T_est = %d; corte entre %s y %s\n", n_total, h, T_est, d$fecha[T_est], d$fecha[T_est + 1]))
+.guardar_fig(graficar_serie(d, "Ejemplo 6. Millas-pasajero de aerolíneas de EE. UU., 1937-1960"), "ej06-tendencia-cuadratica-airmiles-serie.png")
+cg <- correlograma(d)
+.guardar_fig(cg$grafico, "ej06-tendencia-cuadratica-airmiles-correlograma.png", alto = 6)
+.linea(ljung_box(cg$acf, n_total, cg$m, 0))
+
+fit <- ajustar_tendencia(est$y, "cuadratica")
+print(as.data.frame(fit$parametros$tabla), digits = 5)
+cat(sprintf("R2 = %s, sigma2 = %s, DW de los residuos = %s, L (HAC) = %d\n", .fmt_num(fit$parametros$r2),
+            .fmt_num(fit$parametros$sigma2), .fmt_num(fit$parametros$dw), fit$parametros$L))
+.guardar_fig(.grafico_residuos_ajustados(est$y - fit$parametros$residuos, fit$parametros$residuos,
+                                         "Ejemplo 6. Residuos contra valores ajustados"),
+             "ej06-tendencia-cuadratica-airmiles-residuos.png")
+pron <- fit$pronosticar(h); ref <- rep(est$y[T_est], h)
+m_in <- .medir(est$y, fit$yhat, est$y); m_val <- .medir(val$y, pron, est$y); m_ref <- .medir(val$y, ref, est$y)
+print(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo"), digits = 5, row.names = FALSE)
+cot <- .cotas("ej06", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+cat(sprintf("Validación de errores (N = %d):\n", ve$n))
+for (p in list(ve$t_media, ve$ljung_box, ve$jarque_bera, ve$durbin_watson)) .linea(p)
+.guardar_fig(ve$grafico, "ej06-tendencia-cuadratica-airmiles-errores.png", alto = 7)
+.guardar_fig(.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 6. Tendencia cuadrática: ajuste y pronóstico"),
+             "ej06-tendencia-cuadratica-airmiles-pronostico.png")
+resumen[[6]] <- .fila_resumen(6, "airmiles", fit, m_val, m_ref)
