@@ -310,3 +310,37 @@ for (p in list(ve$t_media, ve$ljung_box, ve$jarque_bera, ve$durbin_watson)) .lin
 .guardar_fig(.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 4. Doble media móvil: ajuste y pronóstico"),
              "ej04-dmm-austres-pronostico.png")
 resumen[[4]] <- .fila_resumen(4, "austres", fit, m_val, m_ref)
+
+# ======================================================================================
+# Ejemplo 5. Tendencia lineal sobre LakeHuron
+# ======================================================================================
+cat("\n== Ejemplo 5: tendencia lineal sobre LakeHuron ==\n")
+d <- leer_serie(LakeHuron,
+                fuente = "Brockwell PJ, Davis RA (1991). Time Series: Theory and Methods, 2nd ed. Springer, page 555 (paquete datasets, LakeHuron)",
+                unidad = "Nivel del lago Hurón (pies)")
+n_total <- nrow(d); h <- min(12, floor(0.2 * n_total)); T_est <- n_total - h
+est <- d[seq_len(T_est), ]; val <- d[T_est + seq_len(h), ]
+cat(sprintf("T = %d, h = %d, T_est = %d; corte entre %s y %s\n", n_total, h, T_est, d$fecha[T_est], d$fecha[T_est + 1]))
+.guardar_fig(graficar_serie(d, "Ejemplo 5. Nivel del lago Hurón, 1875-1972"), "ej05-tendencia-lineal-lakehuron-serie.png")
+cg <- correlograma(d)
+.guardar_fig(cg$grafico, "ej05-tendencia-lineal-lakehuron-correlograma.png", alto = 6)
+.linea(ljung_box(cg$acf, n_total, cg$m, 0))
+
+fit <- ajustar_tendencia(est$y, "lineal")
+print(as.data.frame(fit$parametros$tabla), digits = 5)
+cat(sprintf("R2 = %s, sigma2 = %s, DW de los residuos = %s, L (HAC) = %d\n", .fmt_num(fit$parametros$r2),
+            .fmt_num(fit$parametros$sigma2), .fmt_num(fit$parametros$dw), fit$parametros$L))
+.guardar_fig(.grafico_residuos_ajustados(est$y - fit$parametros$residuos, fit$parametros$residuos,
+                                         "Ejemplo 5. Residuos contra valores ajustados"),
+             "ej05-tendencia-lineal-lakehuron-residuos.png")
+pron <- fit$pronosticar(h); ref <- rep(est$y[T_est], h)
+m_in <- .medir(est$y, fit$yhat, est$y); m_val <- .medir(val$y, pron, est$y); m_ref <- .medir(val$y, ref, est$y)
+print(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo"), digits = 5, row.names = FALSE)
+cot <- .cotas("ej05", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+cat(sprintf("Validación de errores (N = %d):\n", ve$n))
+for (p in list(ve$t_media, ve$ljung_box, ve$jarque_bera, ve$durbin_watson)) .linea(p)
+.guardar_fig(ve$grafico, "ej05-tendencia-lineal-lakehuron-errores.png", alto = 7)
+.guardar_fig(.grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 5. Tendencia lineal: ajuste y pronóstico"),
+             "ej05-tendencia-lineal-lakehuron-pronostico.png")
+resumen[[5]] <- .fila_resumen(5, "LakeHuron", fit, m_val, m_ref)
