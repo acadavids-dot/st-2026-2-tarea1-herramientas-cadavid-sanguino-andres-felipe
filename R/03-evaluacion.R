@@ -150,3 +150,85 @@ jarque_bera <- function(e) {
     }
   )
 }
+
+# ---- durbin_watson --------------------------------------------------------------------
+
+#' durbin_watson(e, dL = NULL, dU = NULL)
+#'
+#' Descripción: estadístico de Durbin–Watson sobre los errores (o residuos) e_1, ..., e_N
+#'   y decisión por regiones con las cotas de la tabla.
+#'
+#' Ecuaciones:
+#'   d = sum_{t=2}^{N} (e_t - e_{t-1})^2 / sum_{t=1}^{N} e_t^2,   d ~ 2 (1 - r_1).
+#'   d cerca de 2: sin autocorrelación de orden 1; cerca de 0: positiva; cerca de 4: negativa.
+#'   El denominador es la suma de cuadrados sin centrar, como en la definición del
+#'   estadístico (en residuos de una regresión con intercepto la media ya es cero).
+#'
+#' Decisión: d no tiene una distribución exacta libre de la matriz de diseño, así que no
+#'   hay valor p; se compara con las cotas d_L y d_U de la tabla de Savin y White (1977) para
+#'   N y k' (número de regresores sin contar el intercepto), al 5 % de una cola. Las cotas
+#'   NO están en R base y no se aproximan: se dan como argumentos.
+#'   - Si d < 2 se contrasta H1: rho > 0 con d: se rechaza H0 si d < d_L, no se rechaza si
+#'     d > d_U, y la prueba es inconclusa si d_L <= d <= d_U.
+#'   - Si d >= 2 se contrasta H1: rho < 0 con 4 - d y las mismas cotas.
+#'   Sin dL y dU la función devuelve d y la decisión queda «No evaluada».
+#'
+#' @param e   vector numérico sin NA.
+#' @param dL,dU  cotas inferior y superior (0 < dL < dU < 2), ambas o ninguna.
+#' @return lista con los campos comunes de las pruebas (valor_critico = c(dL, dU) y
+#'   valor_p = NA) y además n, lado ("positiva" o "negativa": la autocorrelación contrastada)
+#'   y rho_aprox = 1 - d/2 (la lectura d ~ 2(1 - r_1)).
+#'
+#' Referencia: Clase 4, Parte VI (DW = 0,7063 en la tendencia lineal); Savin y White (1977).
+durbin_watson <- function(e, dL = NULL, dU = NULL) {
+  stopifnot(
+    "e debe ser un vector numérico sin NA" = is.numeric(e) && length(e) > 0L && !anyNA(e),
+    "se necesitan al menos 3 errores" = length(e) >= 3L,
+    "los errores no pueden ser todos cero" = sum(e^2) > 0,
+    "dL y dU se dan juntos o ninguno" = is.null(dL) == is.null(dU)
+  )
+  if (!is.null(dL)) {
+    stopifnot("dL y dU deben cumplir 0 < dL < dU < 2" =
+                is.numeric(dL) && is.numeric(dU) && length(dL) == 1L && length(dU) == 1L &&
+                !anyNA(c(dL, dU)) && dL > 0 && dL < dU && dU < 2)
+  }
+
+  N <- length(e)
+  d <- sum(diff(e)^2) / sum(e^2)
+  lado <- if (d < 2) "positiva" else "negativa"
+  d_eval <- if (d < 2) d else 4 - d  # con d >= 2 se contrasta la cola negativa con 4 - d
+  simbolo <- if (d < 2) "d" else "4-d"
+
+  if (is.null(dL)) {
+    decision <- "No evaluada: faltan las cotas $d_L$ y $d_U$ de la tabla"
+    region <- r"(Se rechaza $H_0$ si $d < d_L$; no se rechaza si $d > d_U$; inconclusa si $d_L \le d \le d_U$, con $d_L$ y $d_U$ de la tabla de Savin y White (1977) para $N$ y $k'$.)"
+    valor_critico <- c(dL = NA_real_, dU = NA_real_)
+  } else {
+    decision <- if (d_eval < dL) {
+      "Se rechaza $H_0$"
+    } else if (d_eval > dU) {
+      "No se rechaza $H_0$"
+    } else {
+      "Prueba inconclusa ($d_L \\le d \\le d_U$)"
+    }
+    region <- sprintf(
+      "Se rechaza $H_0$ si $%s < d_L = %s$; no se rechaza si $%s > d_U = %s$; inconclusa si $d_L \\le %s \\le d_U$.",
+      simbolo, .fmt_num(dL), simbolo, .fmt_num(dU), simbolo
+    )
+    valor_critico <- c(dL = dL, dU = dU)
+  }
+
+  list(
+    nombre = "Prueba de Durbin–Watson",
+    H0 = r"($H_0:\ \rho = 0$ (sin autocorrelación de orden 1))",
+    H1 = if (lado == "positiva") r"($H_1:\ \rho > 0$)" else r"($H_1:\ \rho < 0$)",
+    formula = r"($d = \dfrac{\sum_{t=2}^{N}(e_t - e_{t-1})^2}{\sum_{t=1}^{N} e_t^2} \approx 2(1 - r_1)$; sin distribución exacta bajo $H_0$, se decide con las cotas $d_L$ y $d_U$)",
+    estadistico = d,
+    gl = NA_real_,
+    valor_critico = valor_critico,
+    valor_p = NA_real_,
+    region = region,
+    decision = decision,
+    n = N, lado = lado, rho_aprox = 1 - d / 2
+  )
+}
