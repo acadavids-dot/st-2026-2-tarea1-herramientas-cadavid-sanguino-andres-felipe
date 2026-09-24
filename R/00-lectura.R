@@ -116,8 +116,9 @@
 #'   t      entero, 1, ..., n
 #'   fecha  Date
 #'   y      numérico
-#'   y los atributos `frecuencia` (1, 4 o 12), `fuente` y `unidad`. Los atributos se
-#'   pierden con algunas operaciones de dplyr; graficar_serie() los exige por eso.
+#'   y los atributos `frecuencia` (1, 4 o 12), `fuente` y `unidad`. Sobreviven a
+#'   filter(), mutate(), select() y a subconjuntos con [ ], pero se pierden si el tibble
+#'   se reconstruye (tibble(), summarise()); graficar_serie() los exige por eso.
 #'
 #' Referencia: enunciado, sección 2(a).
 leer_serie <- function(x, fuente, unidad) {
