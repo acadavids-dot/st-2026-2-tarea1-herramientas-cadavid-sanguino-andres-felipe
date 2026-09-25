@@ -487,27 +487,32 @@ cg$grafico
 #| results: asis
 n_total <- nrow(d)
 r_1 <- .contraste_rh(cg$acf, n_total, 1)
-pp(r_1, paste0("La autocorrelación en el rezago 1 es ", n4(cg$acf[1]), ", muy por encima de la banda de ±", n4(cg$banda),
-               ": el caudal de un año se parece al del anterior. Es la primera de una cola larga: ",
-               sum(abs(cg$acf) > cg$banda), " de los ", cg$m, " rezagos salen de la banda."))
-r_9 <- .contraste_rh(cg$acf, n_total, 9)
-pp(r_9, paste0("Solo en el rezago 9 la autocorrelación (", n4(cg$acf[9]), ") vuelve a quedar dentro de la banda de ±",
-               n4(cg$banda), ": la memoria dura unos ocho años y se apaga sin llegar a ser permanente. Una autocorrelación ",
-               "que no decae indicaría una tendencia; una que se apaga indica un nivel que se mueve despacio."))
+pp(r_1, paste0("La autocorrelación en el primer rezago fue ", n4(cg$acf[1]), ", muy por encima de la banda de ±", n4(cg$banda),
+               ". Por lo tanto, se rechaza la hipótesis de independencia. Esto muestra que el caudal de un año tiene bastante ",
+               "relación con el del año anterior, por lo que utilizar información reciente para pronosticar tiene sentido."))
+h_9 <- which(abs(cg$acf) < cg$banda)[1]
+r_9 <- .contraste_rh(cg$acf, n_total, h_9)
+pp(r_9, paste0("En el rezago ", h_9, " la autocorrelación fue ", n4(cg$acf[h_9]), " y quedó dentro de la banda de ±",
+               n4(cg$banda), ". Esto indica que la memoria de la serie se va perdiendo después de aproximadamente ", h_9 - 1,
+               " años, aunque no de forma limpia: los rezagos ", paste(setdiff(which(abs(cg$acf) > cg$banda), seq_len(h_9)), collapse = ", "),
+               " vuelven a salir de la banda. No parece tratarse de una tendencia permanente, sino de un nivel que cambia poco a poco."))
 lb0 <- ljung_box(cg$acf, n_total, cg$m, 0)
-pp(lb0, paste0("Con Q = ", n4(lb0$estadistico), " y ", lb0$gl, " grados de libertad el valor p es ", pv(lb0$valor_p),
-               ": se rechaza con claridad que la serie sea ruido blanco. Hay estructura que un pronóstico puede aprovechar."))
+pp(lb0, paste0("El valor p fue ", pv(lb0$valor_p), ", por lo que se rechaza que las primeras ", cg$m, " autocorrelaciones ",
+               "sean todas cero. La serie tiene una estructura clara y, por lo tanto, existe información en los datos que puede ",
+               "ser aprovechada para pronosticar."))
 ```
 
-**Lectura del patrón.** El caudal no tiene tendencia sostenida (la recta explica el
-`r n2(100 * cor(seq_len(n_total), d$y)^2)` % de la variación) pero su nivel cambia: el promedio de 1871 a 1898
-es `r n2(mean(d$y[d$fecha < as.Date("1899-01-01")]))` y el de 1899 a 1970 es
-`r n2(mean(d$y[d$fecha >= as.Date("1899-01-01")]))`, una caída de
-`r n2(100 * (1 - mean(d$y[d$fecha >= as.Date("1899-01-01")]) / mean(d$y[d$fecha < as.Date("1899-01-01")])))` % del caudal
-en un solo escalón.
-Ese es el supuesto de la media móvil: un nivel local que puede cambiar, sin pendiente. Una ventana corta se adapta al
-escalón; una larga tarda en reconocerlo. La autocorrelación que decae en unos ocho rezagos es la huella de ese
-nivel que se mueve.
+```{r}
+#| label: ej2-niveles
+antes <- mean(d$y[d$fecha < as.Date("1899-01-01")]); despues <- mean(d$y[d$fecha >= as.Date("1899-01-01")])
+```
+
+**Lectura del patrón.** La serie del caudal del Nilo no presenta una tendencia sostenida, pero sí muestra un cambio
+importante de nivel alrededor de 1898. El promedio pasa de `r n2(antes)` antes de 1899 a `r n2(despues)` después, lo
+que representa una disminución de `r n2(100 * (1 - despues / antes))` %.
+
+Esto hace que una media móvil tenga sentido, porque permite trabajar con un nivel que puede ir cambiando y, al usar los
+datos más recientes, puede adaptarse mejor a ese cambio.
 
 ## Partición
 
@@ -533,13 +538,14 @@ opt$grafico
 tab(opt$rejilla, 2)
 ```
 
-El óptimo es $k =$ `r opt$optimo$k` con MSE `r n4(opt$optimo$mse)`, calculado sobre `r opt$n_err` errores desde
-$t =$ `r opt$origen`. **El óptimo cae en el borde de la rejilla** (`r opt$en_borde`): $k = 2$ es la ventana más corta
-permitida, así que el mínimo podría estar más allá. Significa que la serie pide reaccionar al último dato: cada
-año pesa mucho en el año siguiente, como dice la autocorrelación de `r n4(cg$acf[1])` en el rezago 1. Además la
-curva es casi plana: entre la mejor y la peor ventana el MSE cambia solo
-`r n2(100 * (max(opt$rejilla$mse) / min(opt$rejilla$mse) - 1))` %, de modo que promediar más años no compra
-precisión. La ventana de dos años queda a un paso del pronóstico ingenuo, que es la de un año.
+Al probar las diferentes ventanas, el menor MSE (`r n4(opt$optimo$mse)`, calculado sobre `r opt$n_err` errores desde
+$t =$ `r opt$origen`) se obtuvo con $k =$ `r opt$optimo$k`. Como este resultado está en el límite inferior de la rejilla
+(`r opt$en_borde`), la serie parece necesitar reaccionar bastante a los datos más recientes.
+
+Además, las diferencias entre las ventanas no son muy grandes, ya que el MSE solo cambia
+`r n2(100 * (max(opt$rejilla$mse) / min(opt$rejilla$mse) - 1))` % entre la mejor y la peor. Por eso, aumentar mucho la
+ventana no genera una mejora importante. Con $k =$ `r opt$optimo$k` el método termina siendo bastante parecido al
+pronóstico ingenuo, que utiliza únicamente el último dato.
 
 ## Ajuste y medidas
 
@@ -554,15 +560,14 @@ m_ref <- .medir(val$y, ref, est$y)                # el ingenuo, mismo tramo y mi
 tab(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo"))
 ```
 
-**El método no supera al ingenuo en MASE**: `r n4(m_val$MASE)` contra `r n4(m_ref$MASE)`, es decir, su error
-absoluto medio en validación (`r n2(m_val$MAD)`) es un `r n2(100 * (m_val$MAD / m_ref$MAD - 1))` % mayor que el del ingenuo
-(`r n2(m_ref$MAD)`). En MSE sí lo mejora, `r n2(m_val$MSE)` contra `r n2(m_ref$MSE)`
-(`r n2(100 * (1 - m_val$MSE / m_ref$MSE))` % menos), lo que sugiere que promediar dos años recorta los errores más
-grandes aunque no los típicos. Las dos
-medidas discrepan y la diferencia en cualquiera de las dos es pequeña frente a la dispersión de la serie
-(desviación estándar `r n2(sd(d$y))`), así que con doce datos de validación no se puede afirmar que uno sea mejor.
-La razón de fondo es la de la sección anterior: con $k = 2$ el método es casi el ingenuo, y el ingenuo ya recoge el
-escalón de nivel de 1898 porque copia el último valor.
+La media móvil no supera al ingenuo en MASE, ya que obtuvo `r n4(m_val$MASE)` frente a `r n4(m_ref$MASE)`. La
+diferencia es pequeña y corresponde a un error absoluto medio de `r n2(m_val$MAD)` frente a `r n2(m_ref$MAD)`.
+
+En cambio, sí mejora el MSE, pasando de `r n2(m_ref$MSE)` a `r n2(m_val$MSE)`. Esto indica que la media móvil puede
+reducir algunos errores grandes, aunque los errores típicos no mejoran frente al ingenuo.
+
+En general, la diferencia es pequeña y con solo `r h` datos de validación no sería correcto afirmar que uno de los dos
+métodos es claramente superior.
 
 ## Validación de los errores de un paso
 
@@ -580,20 +585,27 @@ rezagos y banda de ±`r n4(ve$correlograma$banda)`, calculada sobre $N$.
 ```{r}
 #| label: ej2-pruebas-errores
 #| results: asis
-pp(ve$t_media, paste0("El error medio de un paso es ", n4(mean(ve$e)), " sobre una desviación de ", n4(sd(ve$e)),
-                      ": no se distingue de cero, así que la media móvil no sobrestima ni subestima en promedio dentro de la muestra."))
-pp(ve$ljung_box, paste0("Con Q = ", n4(ve$ljung_box$estadistico), " y ", ve$ljung_box$gl, " grados de libertad (m = ",
-                        ve$correlograma$m, ", p = 1 porque se estimó k) no se rechaza que los errores sean incorrelacionados en conjunto. ",
-                        "El rezago 2 sí sale de la banda (r_2 = ", n4(ve$correlograma$acf[2]), ", banda ±", n4(ve$correlograma$banda),
-                        "), pero es lo que produce por construcción una ventana de dos datos: el dato de un año entra con peso 1 en su ",
-                        "propio error y con peso −1/2 en el error de dos años después, lo que induce una correlación negativa en el rezago 2 ",
-                        "(−1/3 si la serie fuera ruido blanco alrededor de un nivel) sin que haya estructura sin modelar."))
-pp(ve$jarque_bera, paste0("JB = ", n4(ve$jarque_bera$estadistico), " con asimetría ", n4(ve$jarque_bera$A), " y curtosis ",
-                          n4(ve$jarque_bera$K), ", muy cerca de 0 y 3: no hay evidencia contra la normalidad de los errores, lo que ",
-                          "respalda las pruebas t y de Ljung–Box de esta sección."))
-pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " supera d_U = ", n2(cot$dU), " (N = ", ve$n,
-                            ", k' = 1): no se rechaza la ausencia de autocorrelación positiva de orden uno, lo que concuerda con ",
-                            "r_1 = ", n4(ve$correlograma$acf[1]), "."))
+fuera_e <- which(abs(ve$correlograma$acf) > ve$correlograma$banda)
+pp(ve$t_media, paste0("El error medio fue ", n4(mean(ve$e)), " y el valor p fue ", pv(ve$t_media$valor_p),
+                      ". Como no se rechaza la hipótesis de media cero, no hay evidencia de que la media móvil tenga un sesgo ",
+                      "sistemático dentro de la muestra."))
+pp(ve$ljung_box, paste0("El valor p fue ", pv(ve$ljung_box$valor_p), ", por lo que no se rechaza que los errores sean ",
+                        "incorrelacionados en conjunto. Aunque el rezago 2 queda por fuera de la banda (r_2 = ",
+                        n4(ve$correlograma$acf[2]), "), esto puede explicarse por la propia forma en que se construye una media ",
+                        "móvil de dos datos: el dato de un año entra con peso 1 en su propio error y con peso −1/2 en el error de dos ",
+                        "años después, lo que induce una correlación negativa en el rezago 2 (−1/3 si la serie fuera ruido blanco ",
+                        "alrededor de un nivel). También salen de la banda los rezagos ",
+                        paste(setdiff(fuera_e, 2), collapse = " y "), ", pero con m = ", ve$correlograma$m,
+                        " rezagos se esperarían alrededor de ", round(0.05 * ve$correlograma$m), " salida por azar. Por lo tanto, ",
+                        "no hay evidencia suficiente para decir que los errores tengan una estructura que el método esté ",
+                        "dejando sin modelar."))
+pp(ve$jarque_bera, paste0("El valor p fue ", pv(ve$jarque_bera$valor_p), ", por lo que no se rechaza la normalidad de los ",
+                          "errores. Además, la asimetría (", n4(ve$jarque_bera$A), ") y la curtosis (", n4(ve$jarque_bera$K),
+                          ") están relativamente cerca de los valores esperados para una distribución normal (0 y 3). Esto ",
+                          "permite considerar razonables las pruebas realizadas sobre los errores."))
+pp(ve$durbin_watson, paste0("El estadístico fue ", n4(ve$durbin_watson$estadistico), " y quedó por encima de d_U = ", n2(cot$dU),
+                            ". Por lo tanto, no se rechaza la ausencia de autocorrelación positiva de orden uno. Esto coincide con ",
+                            "r_1 = ", n4(ve$correlograma$acf[1]), ", que prácticamente es cero."))
 ```
 
 ## Gráfico final
@@ -611,27 +623,30 @@ resumen[[2]] <- .fila_resumen(2, "Nile", fit, m_val, m_ref)
 
 ## Conclusión
 
-Se ajustó una media móvil con la ventana $k =$ `r opt$optimo$k` elegida por `optimizar()` (MSE de un paso
-`r n4(opt$optimo$mse)`, en el borde de la rejilla) sobre los `r T_est` años de estimación. Dentro de la muestra el
-MSE de un paso es `r n4(m_in$MSE)`, el MAD `r n4(m_in$MAD)` y el MASE `r n4(m_in$MASE)` sobre `r m_in$N` errores. En los
-`r h` años de validación el MSE es `r n4(m_val$MSE)`, el MAD `r n4(m_val$MAD)` y el MASE `r n4(m_val$MASE)`, frente a
-`r n4(m_ref$MSE)`, `r n4(m_ref$MAD)` y `r n4(m_ref$MASE)` del ingenuo: **la media móvil no supera al ingenuo en MASE ni en MAD** y
-lo mejora solo en MSE. La razón es que con $k = 2$ el método es casi el ingenuo y la serie es tan ruidosa (desviación
-estándar `r n2(sd(d$y))`) que ninguna ventana mejora de forma apreciable: el MSE varía
-`r n2(100 * (max(opt$rejilla$mse) / min(opt$rejilla$mse) - 1))` % entre las ventanas de la rejilla. La validación de
-errores es limpia: error medio nulo (valor p `r pv(ve$t_media$valor_p)`), sin autocorrelación conjunta (Ljung–Box,
-valor p `r pv(ve$ljung_box$valor_p)`), normales (Jarque–Bera, valor p `r pv(ve$jarque_bera$valor_p)`) y sin
-autocorrelación de orden uno (Durbin–Watson `r n4(ve$durbin_watson$estadistico)` frente a $d_U =$ `r n2(cot$dU)`).
+Se ajustó una media móvil con $k =$ `r opt$optimo$k`, que fue la ventana que produjo el menor MSE dentro de la
+estimación. En la validación obtuvo un MASE de `r n4(m_val$MASE)` frente a `r n4(m_ref$MASE)` del ingenuo. Por lo tanto,
+no lo supera en MASE, aunque sí consigue reducir el MSE de `r n2(m_ref$MSE)` a `r n2(m_val$MSE)`.
+
+Esto muestra que el método puede ayudar a reducir algunos errores grandes, pero la mejora no es suficiente para decir
+que sea claramente mejor que repetir el último dato. Además, $k =$ `r opt$optimo$k` hace que la media móvil sea muy
+parecida al pronóstico ingenuo.
+
+Por otro lado, las pruebas conjuntas sobre los errores fueron favorables: no se encontró sesgo (valor p
+`r pv(ve$t_media$valor_p)`), autocorrelación conjunta (Ljung–Box, valor p `r pv(ve$ljung_box$valor_p)`), problemas de
+normalidad (Jarque–Bera, valor p `r pv(ve$jarque_bera$valor_p)`) ni autocorrelación de orden uno (Durbin–Watson
+`r n4(ve$durbin_watson$estadistico)` frente a $d_U =$ `r n2(cot$dU)`). En el correlograma de los errores salen de la banda
+los rezagos `r paste(fuera_e, collapse = ", ")`, el 2 por la construcción de una media móvil de dos datos y los demás en
+un número compatible con las falsas alarmas esperadas. El método funciona de manera razonable, pero en esta serie no
+aporta una mejora clara frente al ingenuo.
 
 ## Recomendación
 
-El pronóstico le sirve a quien necesite un orden de magnitud del caudal del año siguiente, por ejemplo para una
-primera planeación de uso del agua. Como es una línea plana, solo tiene sentido a horizonte de uno a tres años, y aun
-entonces no aporta frente a repetir el último dato. El límite es la precisión: en los `r h` años de validación el error
-absoluto máximo fue de `r n2(max(abs(val$y - pron)))` (`r n2(100 * max(abs(val$y - pron)) / pron[1])` % del valor
-pronosticado de `r n2(pron[1])`) y el error absoluto medio de `r n2(m_val$MAD)`, un `r n2(100 * m_val$MAD / pron[1])` %. Para
-mejorar sobre el ingenuo hace falta un método que pondere los datos con pesos decrecientes en vez de iguales, como el
-suavizamiento exponencial simple del ejemplo siguiente.
+La media móvil puede servir para tener una estimación general del caudal del año siguiente, especialmente como una
+primera aproximación. Sin embargo, su precisión es limitada: en los `r h` años de validación el error absoluto máximo
+fue de `r n2(max(abs(val$y - pron)))` y el error absoluto medio fue de `r n2(m_val$MAD)`.
+
+Además, el método no consiguió mejorar de forma clara al ingenuo. Para reaccionar mejor a los cambios recientes sería
+preferible utilizar un método que dé pesos diferentes a los datos, como el suavizamiento exponencial simple.
 
 # Ejemplo 3. Suavizamiento exponencial simple sobre `Nile`
 
