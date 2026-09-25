@@ -139,12 +139,19 @@ verificaron en cada caso, está en `bitacora-ia.md` (fuera del repositorio, junt
 | 4 | Confirmar las series candidatas con gráfico y correlograma; conseguir las cotas de Durbin–Watson | Evidencia de selección (dos series cambiadas frente a la propuesta inicial); cotas $d_L$/$d_U$ calculadas de forma exacta | Gráficos y correlogramas de las series candidatas; cotas contra 12 filas de la tabla de Savin y White ($\pm0{,}005$) |
 | 5 | `ejemplos/ejemplos.R` completo | El script con el Bloque 0, los 9 ejemplos y el resumen; 44 figuras | `source("ejemplos/ejemplos.R")` corre limpio y sin advertencias no explicadas; las 14 verificaciones del Bloque 0; figuras revisadas a ojo |
 | 6 | `informe/informe.qmd` completo | El informe con introducción, verificaciones, los 9 ejemplos, tabla resumen y referencias | Cada parte renderiza sin errores; el texto se contrastó contra las cifras reales de la corrida; toda cifra del texto sale de código en línea |
+| 6b | Integrar al informe las interpretaciones que el estudiante redactó para los ejemplos 1 a 6, y verificar sus cifras y afirmaciones | Informe actualizado: cada cifra de esos textos sale de código en línea; se contrastó contra la corrida y se corrigieron los desajustes encontrados (detalle en `bitacora-ia.md`) | Redacción y criterio de cada interpretación de los ejemplos 1 a 6 (estudiante); el contraste de cifras contra la corrida lo ejecutó Claude |
 
-**Sobre las lecturas de las pruebas de hipótesis.** El CLAUDE.md de este proyecto exige que la lectura (el sexto
-elemento de cada prueba) «siempre se escriba a mano». En esta tarea, el estudiante decidió delegar esa redacción en
-Claude en vez de escribirla él mismo. En consecuencia, **las lecturas de las pruebas de hipótesis del informe —y en
-general la redacción del informe— las escribió Claude, no el estudiante.** El estudiante es responsable de haberlas
-leído, de estar de acuerdo con ellas y de poder explicar cada una en la sustentación; el enunciado anula el
-componente de funciones si un fragmento generado por IA no se puede explicar. Lo mismo aplica al código: Claude lo
-escribió y lo verificó contra las funciones de R señaladas arriba, y el estudiante debe poder explicar cada función
-línea por línea.
+**Sobre la redacción del informe.** El CLAUDE.md de este proyecto exige que la lectura de cada prueba de hipótesis (el
+sexto elemento) se escriba a mano. La redacción inicial del informe, incluidas esas lecturas, la escribió Claude. Después,
+**el estudiante redactó su propia versión de las interpretaciones de los ejemplos 1 a 6** (lectura del patrón, lectura
+de cada prueba, optimización, medidas, conclusión y recomendación), con su criterio sobre qué dice cada resultado, y
+Claude las integró: convirtió cada cifra en código en línea, las contrastó con los resultados reales de la corrida y
+señaló o ajustó lo que no coincidía o quedaba impreciso. **Las interpretaciones de los ejemplos 7 y 8 y del
+contraejemplo, y los textos descriptivos de todos los ejemplos (descripción de la serie, partición, ajuste), siguen
+con la redacción de Claude.** El código de las funciones, las verificaciones contra R, la selección de series y el
+ensamblado del informe son trabajo de Claude.
+
+El estudiante es responsable de haber leído todo, de estar de acuerdo con ello y de poder explicar cada función y cada
+ejemplo en la sustentación; el enunciado anula el componente de funciones si un fragmento generado por IA no se puede
+explicar. Claude escribió el código y lo verificó contra las funciones de R señaladas arriba, y el estudiante debe poder
+explicar cada función línea por línea.

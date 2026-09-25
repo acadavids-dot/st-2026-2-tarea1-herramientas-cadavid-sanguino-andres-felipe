@@ -124,9 +124,13 @@ Estas son las que determinan las cifras de este documento.
 
 ### Sobre el uso de IA {-}
 
-El código y la redacción de este informe, incluidas las lecturas de cada prueba de hipótesis, se elaboraron
-con asistencia de Claude (Anthropic). El detalle de qué se pidió, qué se recibió y qué se verificó está en la
-declaración de uso de IA del `README.md`.
+El código, las verificaciones, la selección de las series y el ensamblado de este informe se elaboraron con asistencia
+de Claude (Anthropic), que también escribió la redacción inicial. Las interpretaciones de los ejemplos 1 a 6 (lectura
+del patrón, lectura de cada prueba, optimización, medidas, conclusión y recomendación) las redactó el estudiante; Claude
+las integró convirtiendo cada cifra en código en línea y contrastándolas con los resultados de la corrida. Las
+interpretaciones de los ejemplos 7 y 8 y del contraejemplo, y los textos descriptivos de todos los ejemplos, siguen con
+la redacción de Claude. El detalle de qué se pidió, qué se recibió y qué se verificó está en la declaración de uso de IA
+del `README.md`.
 
 # Verificaciones contra R
 
