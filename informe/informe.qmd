@@ -1773,17 +1773,21 @@ Con $T = `r n_total`$ y $h = `r h`$ (tres años), el tramo de estimación va de 
 
 ## Optimización de las constantes
 
-El par $(\alpha, \beta)$ se elige con `optimizar()` sobre la rejilla de $19 \times 19$ valores de $0{,}05$ a $0{,}95$, minimizando
-el MSE de un paso dentro del tramo de estimación (origen común en $t = 2$).
+El par $(\alpha, \beta)$ se elige con `optimizar()` sobre una rejilla que combina todos los valores de $\alpha$ con
+todos los de $\beta$, minimizando el MSE de un paso dentro del tramo de estimación (origen común en $t = 2$).
 
 ```{r}
 #| label: ej8-optimizar
 opt <- optimizar(est$y, "holt")
+n_alpha <- length(unique(opt$rejilla$alpha)); n_beta <- length(unique(opt$rejilla$beta))
+paso_grilla <- diff(sort(unique(opt$rejilla$alpha)))[1]
 opt$grafico
 tab(head(opt$rejilla[order(opt$rejilla$mse), ], 6), 2)
 ```
 
-El óptimo es $\alpha =$ `r n2(opt$optimo$alpha)` y $\beta =$ `r n2(opt$optimo$beta)` con MSE `r n4(opt$optimo$mse)`, sobre
+La rejilla tiene `r n_alpha` $\times$ `r n_beta`$=$ `r nrow(opt$rejilla)` combinaciones, con $\alpha$ y $\beta$ de
+`r n2(min(opt$rejilla$alpha))` a `r n2(max(opt$rejilla$alpha))` en pasos de `r n2(paso_grilla)`. El óptimo es
+$\alpha =$ `r n2(opt$optimo$alpha)` y $\beta =$ `r n2(opt$optimo$beta)` con MSE `r n4(opt$optimo$mse)`, sobre
 `r opt$n_err` errores. **El óptimo está en el borde de la rejilla** (`r opt$en_borde`): $\alpha$ toma el máximo permitido,
 `r n2(max(opt$rejilla$alpha))`, mientras que $\beta$ es interior. Un $\alpha$ en el borde superior significa que el nivel copia casi
 por completo el último dato, que es el comportamiento del pronóstico ingenuo, y señala que la serie no es estacionaria en media,
