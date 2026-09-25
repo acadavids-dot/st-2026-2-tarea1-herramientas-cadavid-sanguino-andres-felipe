@@ -167,7 +167,7 @@ informe con sus cifras generadas por código; las de los ejemplos 7 y 8 y del co
 Claude. La responsabilidad final sobre las interpretaciones presentadas, su comprensión y su explicación en la
 sustentación corresponde al estudiante.
 
-**Sobre el código.** La estructura de solución fue planteada por el estudiante. Claude escribió gran parte de las
-funciones y de los ejemplos a partir de esa propuesta, y el estudiante participó en todas las fases, inició algunas de
-ellas y modificó varias partes del código. El código final es, por lo tanto, resultado de un trabajo conjunto, y Claude
+**Sobre el código.** Según declara el estudiante, la propuesta inicial del código y la estructura de solución fueron
+planteadas por él. Claude escribió gran parte de las funciones y de los ejemplos a partir de esas propuestas, y el
+estudiante participó en todas las fases, inició algunas de ellas y modificó varias partes del código. El código final es, por lo tanto, resultado de un trabajo conjunto, y Claude
 no escribió todo. El estudiante debe poder explicar cada función línea por línea.
