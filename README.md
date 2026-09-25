@@ -6,19 +6,19 @@ Series de Tiempo (3009297), UNAL Medellín, 2026-II. Prof. Juan Pablo Valencia A
 
 ## Qué contiene el repositorio
 
-| Archivo / carpeta | Contenido | Dependencias |
-|---|---|---|
-| `README.md` | este archivo | — |
-| `.gitignore` | archivos y carpetas que no se versionan (`.Rhistory`, `.RData`, `.Rproj.user/`, `informe/informe_files/`, `informe/.quarto/`, etc.) | — |
-| `R/00-lectura.R` | `leer_serie()` | base (`stats`, `utils`), `tibble` |
-| `R/01-graficos.R` | `graficar_serie()`, `correlograma()`, tema `.tema_tarea()` y los auxiliares de gráficos (`.grafico_pronostico`, `.grafico_residuos_ajustados`) | `ggplot2`, `patchwork`, `stats` (`pacf`, `qnorm`) |
-| `R/02-metodos.R` | los ocho `ajustar_*()` y `optimizar()` | base, `tibble`, `ggplot2` (gráficos de `optimizar()`), `stats` (`pt`) |
-| `R/03-evaluacion.R` | `medidas()`, `ljung_box()`, `jarque_bera()`, `durbin_watson()`, `validar_errores()` y sus auxiliares (`.reportar_prueba`, `.medir`, `.tabla_medidas`, `.cotas`, `.contraste_rh`) | base, `tibble`, `ggplot2`, `patchwork`, `stats` |
-| `ejemplos/ejemplos.R` | carga `R/`, corre el Bloque 0 de verificaciones contra R base y los 9 ejemplos (8 + contraejemplo), guarda las figuras y `sesion-info.txt` | los anteriores; `stats::acf()`, `stats::lm()` y `stats::Box.test()` **solo** en el Bloque 0 |
-| `informe/informe.qmd` | fuente del informe: introducción y convenciones, verificaciones contra R, los 9 ejemplos, tabla resumen, referencias y `sessionInfo()` | los anteriores; `knitr`/`rmarkdown`/Quarto únicamente como herramienta de render, nunca dentro de un método |
-| `informe/informe.html` | informe renderizado, autocontenido (`embed-resources`) | — |
-| `figs/` | 44 figuras que genera `ejemplos.R` (serie, correlograma, optimización, errores y pronóstico de cada ejemplo) | — |
-| `sesion-info.txt` | `sessionInfo()` de la corrida de cierre de `ejemplos.R` | — |
+| Archivo / carpeta        | Contenido                                                                                                                                                                                            | Dependencias                                                                                                     |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `README.md`            | este archivo                                                                                                                                                                                         | —                                                                                                               |
+| `.gitignore`           | archivos y carpetas que no se versionan (`.Rhistory`, `.RData`, `.Rproj.user/`, `informe/informe_files/`, `informe/.quarto/`, etc.)                                                        | —                                                                                                               |
+| `R/00-lectura.R`       | `leer_serie()`                                                                                                                                                                                     | base (`stats`, `utils`), `tibble`                                                                          |
+| `R/01-graficos.R`      | `graficar_serie()`, `correlograma()`, tema `.tema_tarea()` y los auxiliares de gráficos (`.grafico_pronostico`, `.grafico_residuos_ajustados`)                                            | `ggplot2`, `patchwork`, `stats` (`pacf`, `qnorm`)                                                      |
+| `R/02-metodos.R`       | los ocho`ajustar_*()` y `optimizar()`                                                                                                                                                            | base,`tibble`, `ggplot2` (gráficos de `optimizar()`), `stats` (`pt`)                                  |
+| `R/03-evaluacion.R`    | `medidas()`, `ljung_box()`, `jarque_bera()`, `durbin_watson()`, `validar_errores()` y sus auxiliares (`.reportar_prueba`, `.medir`, `.tabla_medidas`, `.cotas`, `.contraste_rh`) | base,`tibble`, `ggplot2`, `patchwork`, `stats`                                                           |
+| `ejemplos/ejemplos.R`  | carga`R/`, corre el Bloque 0 de verificaciones contra R base y los 9 ejemplos (8 + contraejemplo), guarda las figuras y `sesion-info.txt`                                                        | los anteriores;`stats::acf()`, `stats::lm()` y `stats::Box.test()` **solo** en el Bloque 0           |
+| `informe/informe.qmd`  | fuente del informe: introducción y convenciones, verificaciones contra R, los 9 ejemplos, tabla resumen, referencias y`sessionInfo()`                                                             | los anteriores;`knitr`/`rmarkdown`/Quarto únicamente como herramienta de render, nunca dentro de un método |
+| `informe/informe.html` | informe renderizado, autocontenido (`embed-resources`)                                                                                                                                             | —                                                                                                               |
+| `figs/`                | 44 figuras que genera`ejemplos.R` (serie, correlograma, optimización, errores y pronóstico de cada ejemplo)                                                                                      | —                                                                                                               |
+| `sesion-info.txt`      | `sessionInfo()` de la corrida de cierre de `ejemplos.R`                                                                                                                                          | —                                                                                                               |
 
 De los paquetes permitidos por el enunciado (`dplyr`, `tidyr`, `purrr`, `tibble`, `ggplot2`, `patchwork`), este trabajo
 solo necesitó `tibble`, `ggplot2` y `patchwork`; `dplyr`, `tidyr` y `purrr` no se usan en ningún archivo.
@@ -107,17 +107,17 @@ función correspondiente y aquí. Estas son las que determinan las cifras de `ej
 MASE de validación de cada método frente a su referente, sobre el mismo tramo y el mismo horizonte $h=\min\{12,
 \lfloor 0{,}2\,T\rfloor\}$ (ver el detalle de cada ejemplo en el informe):
 
-| # | Serie | Método | Parámetros | MASE método | MASE referente |
-|---|---|---|---|---|---|
-| 1 | `discoveries` | Media simple | — | 0,9192 | 1,1365 |
-| 2 | `Nile` | Media móvil | $k=2$ (borde) | 0,8467 | 0,8355 |
-| 3 | `Nile` | SES | $\alpha=0{,}24$ | 0,8062 | 0,8355 |
-| 4 | `austres` | Doble media móvil | $k=2$ (borde) | 1,8632 | 6,0912 |
-| 5 | `LakeHuron` | Tendencia lineal | — | 2,0667 | 2,1642 |
-| 6 | `airmiles` | Tendencia cuadrática | — | 1,2055 | 4,4959 |
-| 7 | `JohnsonJohnson` | Tendencia exponencial | — | 3,5142 | 6,5286 |
-| 8 | `austres` | Holt | $\alpha=0{,}95$ (borde), $\beta=0{,}8$ | 1,4842 | 6,0912 |
-| C | `AirPassengers` | SES (contraejemplo) | $\alpha=0{,}98$ (borde) | 2,5143 | 1,5709 |
+| # | Serie              | Método                    | Parámetros                                | MASE método | MASE referente |
+| - | ------------------ | -------------------------- | ------------------------------------------ | ------------ | -------------- |
+| 1 | `discoveries`    | Media simple               | —                                         | 0,9192       | 1,1365         |
+| 2 | `Nile`           | Media móvil               | $k=2$ (borde)                            | 0,8467       | 0,8355         |
+| 3 | `Nile`           | SES                        | $\alpha=0{,}24$                          | 0,8062       | 0,8355         |
+| 4 | `austres`        | Doble media móvil         | $k=2$ (borde)                            | 1,8632       | 6,0912         |
+| 5 | `LakeHuron`      | Tendencia lineal           | —                                         | 2,0667       | 2,1642         |
+| 6 | `airmiles`       | Tendencia cuadrática      | —                                         | 1,2055       | 4,4959         |
+| 7 | `JohnsonJohnson` | Tendencia exponencial | —                                         | 3,5142       | 6,5286         |
+| 8 | `austres`        | Holt                       | $\alpha=0{,}95$ (borde), $\beta=0{,}8$ | 1,4842       | 6,0912         |
+| C | `AirPassengers`  | SES (contraejemplo)        | $\alpha=0{,}98$ (borde)                  | 2,5143       | 1,5709         |
 
 Siete de los nueve casos tienen un MASE del método menor que el de su referente. Los dos que no: la media móvil del
 ejemplo 2, por un margen mínimo (0,8467 contra 0,8355; el patrón de `Nile` igual justifica el método, como se
@@ -126,40 +126,48 @@ firma numérica de aplicar un suavizamiento sin tendencia ni estacionalidad a un
 
 ## Declaración de uso de IA
 
-Este trabajo lo desarrolló el estudiante con Claude (Anthropic, modelo Sonnet 5) como asistente de programación, en
-sesiones de Claude Code sobre este repositorio. El estudiante participó en todas las fases y en algunas fue quien inició
-el trabajo; aprobó el plan de cada fase, tomó las decisiones de entrega (repositorio público, fecha confirmada con el
-profesor), pidió una auditoría completa del código y modificó partes del código. Claude escribió la versión inicial del
-código de las funciones y de los ejemplos y lo verificó contra las funciones de R señaladas, produjo borradores de los
-textos del informe, y acompañó el proceso con explicaciones y material de estudio para que el estudiante entienda el
-código y pueda sustentarlo.
+Este trabajo se realizó con asistencia de Claude (Anthropic, modelo Sonnet 5), utilizado como asistente durante el
+desarrollo y revisión del código en sesiones de Claude Code sobre este repositorio.
 
-La tabla resume lo pedido y lo recibido en cada fase; el detalle completo, con las cifras que se verificaron en cada
-caso, está en `bitacora-ia.md` (fuera del repositorio, junto a los apuntes de trabajo).
+La propuesta inicial de la estructura del código, la organización general de las funciones y el enfoque de solución
+fueron planteados por el estudiante. A partir de esa propuesta, Claude participó como asistente de programación,
+escribiendo gran parte del código de las funciones y de los ejemplos y ayudando a completar, revisar y depurar la
+implementación. Claude no escribió todo el código: el estudiante participó en todas las fases, inició algunas de ellas y
+modificó varias partes.
 
-| Fase | Qué se pidió | Qué se recibió | Qué se verificó por cuenta propia |
-|---|---|---|---|
-| 0 | Estructura del repositorio, `.gitignore`, README esqueleto | Carpetas y archivos según la sección 1 del enunciado | Comparación contra la estructura exigida |
-| 1 | `leer_serie()`, `graficar_serie()`, `correlograma()` | Las tres funciones y sus auxiliares internas | Fechas de las 15 series contra aritmética de `start()`/`end()`; ACF a mano contra `acf()` (diferencia relativa del orden de $10^{-15}$); banda idéntica a `plot.acf()`; casos de error con mensaje claro |
-| 2 | `ljung_box()`, `jarque_bera()`, `durbin_watson()`, `medidas()`, `validar_errores()` | Las cinco funciones y sus auxiliares | $Q_m$ contra `Box.test()`; JB y DW contra `tseries`/`lmtest` (solo en `scratch/`, nunca en el repo); `medidas()` reproduce las cifras de la Clase 3 |
-| 3 | Los ocho métodos y `optimizar()` | Seis funciones `ajustar_*`, `optimizar()` y sus auxiliares | Cifras de las Clases 3 y 4 reproducidas; equivalencias de cada método (MM recursiva, SES ponderada, DMM directa, Holt en corrección de error) con diferencia relativa menor a $10^{-12}$; tendencias contra `lm()`; HAC contra `sandwich::NeweyWest` (solo en `scratch/`) |
-| 4 | Confirmar las series candidatas con gráfico y correlograma; conseguir las cotas de Durbin–Watson | Evidencia de selección (dos series cambiadas frente a la propuesta inicial); cotas $d_L$/$d_U$ calculadas de forma exacta | Gráficos y correlogramas de las series candidatas; cotas contra 12 filas de la tabla de Savin y White ($\pm0{,}005$) |
-| 5 | `ejemplos/ejemplos.R` completo | El script con el Bloque 0, los 9 ejemplos y el resumen; 44 figuras | `source("ejemplos/ejemplos.R")` corre limpio y sin advertencias no explicadas; las 14 verificaciones del Bloque 0; figuras revisadas a ojo |
-| 6 | `informe/informe.qmd` completo | El informe con introducción, verificaciones, los 9 ejemplos, tabla resumen y referencias | Cada parte renderiza sin errores; el texto se contrastó contra las cifras reales de la corrida; toda cifra del texto sale de código en línea |
-| 6b | Integrar al informe las interpretaciones que el estudiante redactó para los ejemplos 1 a 6, y verificar sus cifras y afirmaciones | Informe actualizado: cada cifra de esos textos sale de código en línea; se contrastó contra la corrida y se corrigieron los desajustes encontrados (detalle en `bitacora-ia.md`) | Redacción y criterio de cada interpretación de los ejemplos 1 a 6 (estudiante); el contraste de cifras contra la corrida lo ejecutó Claude |
+La siguiente tabla resume las principales etapas de esta colaboración. Las verificaciones indicadas se ejecutaron en las
+sesiones de trabajo con Claude, y el estudiante participó en su revisión para comprobar que los resultados y las
+implementaciones cumplieran con lo solicitado.
 
-**Sobre la redacción del informe.** El CLAUDE.md de este proyecto exige que la lectura de cada prueba de hipótesis (el
-sexto elemento) se escriba a mano. La redacción inicial del informe, incluidas esas lecturas, la escribió Claude. Después,
-**el estudiante redactó su propia versión de las interpretaciones de los ejemplos 1 a 6** (lectura del patrón, lectura
-de cada prueba, optimización, medidas, conclusión y recomendación), con su criterio sobre qué dice cada resultado, y
-Claude las integró: convirtió cada cifra en código en línea, las contrastó con los resultados reales de la corrida y
-señaló o ajustó lo que no coincidía o quedaba impreciso. **Las interpretaciones de los ejemplos 7 y 8 y del
-contraejemplo, y los textos descriptivos de todos los ejemplos (descripción de la serie, partición, ajuste), siguen
-con la redacción de Claude.** La versión inicial del código de las funciones, las verificaciones contra R, la selección
-de series y el ensamblado del informe las produjo Claude; el estudiante participó en cada fase y modificó partes del
-código.
+| Fase | Propuesta / solicitud inicial del estudiante | Participación de Claude | Qué se verificó |
+| ---- | ------------------------------------------- | ---------------------- | --------------------------------- |
+| 0 | Estructura del repositorio, `.gitignore` y organización inicial del proyecto | Apoyo en la creación y organización de archivos y carpetas según la propuesta inicial | Comparación contra la estructura exigida |
+| 1 | Propuesta de las funciones `leer_serie()`, `graficar_serie()` y `correlograma()` y de su funcionamiento general | Implementación y desarrollo de las funciones y sus auxiliares, con revisión y ajustes del estudiante | Fechas de las 15 series contra aritmética de `start()`/`end()`; ACF a mano contra `acf()`; banda idéntica a `plot.acf()`; casos de error |
+| 2 | Propuesta de las funciones de evaluación de errores y de las pruebas estadísticas necesarias | Implementación de `ljung_box()`, `jarque_bera()`, `durbin_watson()`, `medidas()` y `validar_errores()` y sus auxiliares | $Q_m$ contra `Box.test()`; JB y DW contra `tseries`/`lmtest` (solo en `scratch/`); reproducción de las cifras de la Clase 3 |
+| 3 | Propuesta de los métodos de pronóstico que debían implementarse y de la función `optimizar()` | Programación, depuración y revisión de los ocho métodos y `optimizar()` | Cifras de las Clases 3 y 4; equivalencias de los métodos con formulaciones de referencia; tendencias contra `lm()`; HAC contra `sandwich::NeweyWest` (solo en `scratch/`) |
+| 4 | Propuesta inicial de las series candidatas y criterios para seleccionar las series definitivas | Apoyo en la revisión mediante gráficos, correlogramas y cálculos necesarios | Gráficos y correlogramas de las series candidatas; selección final y cotas $d_L$/$d_U$ |
+| 5 | Propuesta de la estructura general de `ejemplos/ejemplos.R` y de los análisis que debía ejecutar | Escritura e integración del script, depuración y generación de las figuras | `source("ejemplos/ejemplos.R")` corre limpio; 14 verificaciones del Bloque 0; figuras revisadas |
+| 6 | Propuesta de la estructura y contenido general del informe | Redacción técnica inicial y revisión de consistencia entre el código y los resultados (las interpretaciones de los ejemplos 1 a 6 las redactó el estudiante) | Renderizado completo; contraste del texto con las cifras reales de la corrida; verificación de que las cifras del informe salen del código |
 
-El estudiante es responsable de haber leído todo, de estar de acuerdo con ello y de poder explicar cada función y cada
-ejemplo en la sustentación; el enunciado anula el componente de funciones si un fragmento generado por IA no se puede
-explicar. Claude verificó el código contra las funciones de R señaladas arriba, y el estudiante debe poder explicar cada
-función línea por línea.
+### Alcance de la asistencia de IA
+
+Claude se utilizó como herramienta de apoyo para programación y revisión, no como fuente independiente de la propuesta
+inicial del trabajo. La lógica general y la selección del enfoque fueron planteadas por el estudiante, y posteriormente
+se utilizó Claude para convertir esas propuestas en una implementación funcional, detectar errores, hacer ajustes y
+verificar resultados.
+
+En particular, la asistencia de Claude incluyó la escritura de gran parte del código, sugerencias de implementación,
+corrección de errores, revisión de resultados y apoyo en la documentación. Las verificaciones descritas en este README
+se ejecutaron con Claude, y el estudiante revisó los resultados obtenidos.
+
+**Sobre las lecturas de las pruebas de hipótesis.** El `CLAUDE.md` de este proyecto establece que la lectura (el sexto
+elemento de cada prueba) debe escribirse a mano. Claude redactó los borradores iniciales de las interpretaciones del
+informe. El estudiante redactó su propia versión de las interpretaciones de los ejemplos 1 a 6, que se integraron al
+informe con sus cifras generadas por código; las de los ejemplos 7 y 8 y del contraejemplo siguen con la redacción de
+Claude. La responsabilidad final sobre las interpretaciones presentadas, su comprensión y su explicación en la
+sustentación corresponde al estudiante.
+
+**Sobre el código.** La estructura de solución fue planteada por el estudiante. Claude escribió gran parte de las
+funciones y de los ejemplos a partir de esa propuesta, y el estudiante participó en todas las fases, inició algunas de
+ellas y modificó varias partes del código. El código final es, por lo tanto, resultado de un trabajo conjunto, y Claude
+no escribió todo. El estudiante debe poder explicar cada función línea por línea.
