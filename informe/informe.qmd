@@ -1067,24 +1067,25 @@ cg$grafico
 #| results: asis
 n_total <- nrow(d)
 r_1 <- .contraste_rh(cg$acf, n_total, 1)
-pp(r_1, paste0("r_1 = ", n4(cg$acf[1]), " frente a una banda de ±", n4(cg$banda), ": el nivel de un año es muy parecido al del ",
-               "anterior. La persistencia es alta, propia de una serie con tendencia o con un nivel que deriva."))
+pp(r_1, paste0("La autocorrelación en el primer rezago fue ", n4(cg$acf[1]), ", muy por encima de la banda de ±", n4(cg$banda),
+               ". Esto muestra una relación bastante fuerte entre el nivel de un año y el del año anterior, algo compatible con ",
+               "una serie que presenta tendencia o una deriva del nivel."))
 h_10 <- which(abs(cg$acf) < cg$banda)[1]
 r_10 <- .contraste_rh(cg$acf, n_total, h_10)
-pp(r_10, paste0("Recién en el rezago ", h_10, " la autocorrelación (", n4(cg$acf[h_10]), ") entra en la banda de ±", n4(cg$banda),
-                ". Decae despacio y sin oscilar durante ", h_10 - 1, " rezagos, lo que es compatible con una tendencia descendente ",
-                "sobre la que el nivel fluctúa con memoria larga."))
+pp(r_10, paste0("La autocorrelación entra en la banda por primera vez en el rezago ", h_10, ", con un valor de ", n4(cg$acf[h_10]),
+                ". Esto significa que la dependencia tarda bastante en desaparecer y es compatible con una tendencia descendente ",
+                "acompañada de fluctuaciones que tienen memoria."))
 lb0 <- ljung_box(cg$acf, n_total, cg$m, 0)
-pp(lb0, paste0("Q = ", n4(lb0$estadistico), " con ", lb0$gl, " grados de libertad y valor p ", pv(lb0$valor_p),
-               ": se rechaza con contundencia que la serie sea ruido blanco."))
+pp(lb0, paste0("El valor p fue ", pv(lb0$valor_p), ", por lo que se rechaza que la serie sea ruido blanco. La serie tiene ",
+               "una estructura clara y no puede considerarse simplemente aleatoria."))
 ```
 
-**Lectura del patrón.** El nivel del lago baja de forma sostenida: el promedio de la primera mitad de la serie es
-`r n2(mean(d$y[1:49]))` pies y el de la segunda `r n2(mean(d$y[50:n_total]))`. Una recta en $t$ explica solo el
-`r n2(100 * cor(seq_len(n_total), d$y)^2)` % de la variación: la tendencia es real pero las fluctuaciones alrededor de ella
-son grandes y persistentes (la ACF decae hasta el rezago `r h_10`). Es justamente el caso para el que sirven el error
-estándar robusto y Durbin–Watson: una tendencia lineal determinista con residuos autocorrelacionados. Se ajusta la
-recta sabiendo que sus residuos no serán ruido blanco y se mide cuánto cambia la inferencia por ello.
+**Lectura del patrón.** El nivel del lago Hurón presenta una tendencia descendente, aunque los datos tienen bastante
+variación alrededor de esa tendencia. La regresión lineal explica solo el `r n2(100 * cor(seq_len(n_total), d$y)^2)` %
+de la variación y la autocorrelación se mantiene durante varios rezagos.
+
+Esto hace que la serie sea útil para mostrar qué ocurre cuando se ajusta una tendencia lineal pero los residuos todavía
+tienen dependencia. Por esa razón también se utilizan errores estándar robustos y la prueba de Durbin–Watson.
 
 ## Partición
 
@@ -1121,10 +1122,13 @@ m_ses <- .medir(val$y, ses_lh$pronosticar(h), est$y)
 e_m <- val$y - pron; e_r <- val$y - ref           # errores de validación del método y del ingenuo
 ```
 
-En validación la recta supera al ingenuo, pero por poco: MASE `r n4(m_val$MASE)` contra `r n4(m_ref$MASE)` y MSE
-`r n4(m_val$MSE)` contra `r n4(m_ref$MSE)`. El suavizamiento exponencial simple, sobre los mismos datos, tuvo un MASE de
-`r n4(m_ses$MASE)`: las tres alternativas quedan a `r n2(100 * (max(m_val$MASE, m_ref$MASE, m_ses$MASE) / min(m_val$MASE, m_ref$MASE, m_ses$MASE) - 1))` %
-entre sí, sin que la serie permita separar con claridad a la mejor.
+La tendencia lineal mejora ligeramente al pronóstico ingenuo. El MASE pasa de `r n4(m_ref$MASE)` a `r n4(m_val$MASE)` y
+el MSE de `r n4(m_ref$MSE)` a `r n4(m_val$MSE)`.
+
+Sin embargo, la diferencia es pequeña. Además, el suavizamiento exponencial simple obtiene un MASE de
+`r n4(m_ses$MASE)`, por lo que los tres métodos tienen resultados bastante cercanos (a
+`r n2(100 * (max(m_val$MASE, m_ref$MASE, m_ses$MASE) / min(m_val$MASE, m_ref$MASE, m_ses$MASE) - 1))` % entre sí). Con
+estos datos no hay una diferencia suficientemente grande como para afirmar que uno sea claramente superior a los demás.
 
 ## Validación de los errores de un paso
 
@@ -1144,20 +1148,22 @@ $m = `r ve$correlograma$m`$ rezagos la banda es de ±`r n4(ve$correlograma$banda
 ```{r}
 #| label: ej5-pruebas-errores
 #| results: asis
-pp(ve$t_media, paste0("La media de los residuos es ", n4(mean(ve$e)), ": es cero por construcción, porque una regresión por mínimos ",
-                      "cuadrados con intercepto hace que los residuos sumen cero. La prueba no tiene poder informativo aquí; el supuesto de ",
-                      "media cero solo se vería violado por una forma funcional equivocada, y eso lo muestra la autocorrelación."))
-pp(ve$ljung_box, paste0("Q = ", n4(ve$ljung_box$estadistico), " con ", ve$ljung_box$gl, " grados de libertad (m = ",
-                        ve$correlograma$m, ", p = 2 porque se estimaron beta_0 y beta_1) y valor p ", pv(ve$ljung_box$valor_p),
-                        ": los residuos están fuertemente autocorrelacionados. ", sum(abs(ve$correlograma$acf) > ve$correlograma$banda),
-                        " de los ", ve$correlograma$m, " rezagos salen de la banda y r_1 = ", n4(ve$correlograma$acf[1]),
-                        ". La recta no captura la dinámica del nivel del lago."))
-pp(ve$jarque_bera, paste0("JB = ", n4(ve$jarque_bera$estadistico), " con asimetría ", n4(ve$jarque_bera$A), " y curtosis ",
-                          n4(ve$jarque_bera$K), ": no hay evidencia contra la normalidad de los residuos. El supuesto de normalidad ",
-                          "se sostiene, lo que no arregla la autocorrelación."))
-pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " está muy por debajo de d_L = ", n2(cot$dL), " (N = ", ve$n,
-                            ", k' = 1, ambas cotas de la tabla): autocorrelación positiva de orden uno, con ρ ≈ ",
-                            n4(ve$durbin_watson$rho_aprox), ", coherente con r_1 = ", n4(ve$correlograma$acf[1]), "."))
+pp(ve$t_media, paste0("El promedio de los residuos es prácticamente cero (", n4(mean(ve$e)), ") y el valor p es ",
+                      pv(ve$t_media$valor_p), ". En este caso, la prueba no aporta mucha información porque en una regresión por ",
+                      "mínimos cuadrados con intercepto los residuos suman cero por construcción. Por eso, el resultado importante ",
+                      "sobre los residuos se encuentra en las pruebas de autocorrelación."))
+pp(ve$ljung_box, paste0("El valor p fue ", pv(ve$ljung_box$valor_p), ", por lo que se rechaza que los residuos sean ",
+                        "incorrelacionados. Además, ", sum(abs(ve$correlograma$acf) > ve$correlograma$banda), " de los ",
+                        ve$correlograma$m, " rezagos quedan por fuera de la banda y r_1 = ", n4(ve$correlograma$acf[1]),
+                        ". Esto muestra que la recta no está capturando toda la dinámica de la serie. Aunque la tendencia lineal ",
+                        "describe una parte del comportamiento, todavía queda bastante estructura en los residuos."))
+pp(ve$jarque_bera, paste0("El valor p fue ", pv(ve$jarque_bera$valor_p), ", por lo que no se rechaza la normalidad de los ",
+                          "residuos. Sin embargo, que los residuos sean aproximadamente normales no soluciona el problema de ",
+                          "autocorrelación encontrado anteriormente."))
+pp(ve$durbin_watson, paste0("El estadístico fue ", n4(ve$durbin_watson$estadistico), ", muy por debajo de d_L = ", n2(cot$dL),
+                            ". Por lo tanto, se rechaza la ausencia de autocorrelación positiva de orden uno. El resultado coincide ",
+                            "con r_1 = ", n4(ve$correlograma$acf[1]), " y confirma que existe una fuerte dependencia entre los ",
+                            "residuos consecutivos."))
 ```
 
 ## Coeficientes y supuestos de la regresión
@@ -1170,27 +1176,28 @@ tab(tabla_coef(fit))
 $R^2 =$ `r n4(p$r2)`, $\hat\sigma^2 =$ `r n4(p$sigma2)` (suma de cuadrados residual entre $T - p =$ `r p$gl`), estadístico de Durbin–Watson
 de los residuos `r n4(p$dw)` y `r p$L` rezagos en el error estándar robusto ($L = \lfloor 4 (T/100)^{2/9}\rfloor$).
 
-**Por qué se decide con el error estándar robusto.** Con residuos autocorrelacionados de forma positiva el error estándar
-ordinario está subestimado: supone observaciones independientes y aquí hay menos información efectiva. Con
-$r_1 =$ `r n4(ve$correlograma$acf[1])` el tamaño de muestra efectivo es aproximadamente
-$T(1 - r_1)/(1 + r_1) =$ `r n2(ve$n * (1 - ve$correlograma$acf[1]) / (1 + ve$correlograma$acf[1]))` observaciones, no `r ve$n`. Por eso los
-valores p ordinarios de la tabla no son interpretables, y el error estándar de la pendiente crece
-`r n2(p$tabla$ee_robusto[2] / p$tabla$ee_ordinario[2])` veces al pasar al robusto. La decisión sobre cada coeficiente se toma con el
-robusto:
+**Por qué se decide con el error estándar robusto.** Como los residuos presentan autocorrelación, los errores estándar
+normales pueden subestimar la incertidumbre de los coeficientes. Por eso se utiliza el error estándar robusto.
+
+En este caso, el error estándar de la pendiente aumenta `r n2(p$tabla$ee_robusto[2] / p$tabla$ee_ordinario[2])` veces al
+utilizar el método robusto. Esto muestra que los valores p obtenidos con el error estándar común podían dar una
+impresión de mayor precisión de la que realmente existe, y por eso no son interpretables: la decisión sobre cada
+coeficiente se toma con el robusto.
 
 ```{r}
 #| label: ej5-pruebas-coef
 #| results: asis
 t_b0 <- .t_coeficiente(r"(\beta_0)", p$tabla$estimacion[1], p$tabla$ee_robusto[1], p$gl, T_est)
-pp(t_b0, paste0("beta_0 = ", n4(p$tabla$estimacion[1]), " pies es el nivel de la recta en t = 0, un año antes del primer dato. Que se ",
-                "distinga de cero es trivial (un lago no está a nivel cero) y solo se reporta por completitud: lo que importa es ",
-                "el nivel de partida y la pendiente."))
+pp(t_b0, paste0("El intercepto β_0 = ", n4(p$tabla$estimacion[1]), " es estadísticamente significativo (t = ",
+                n4(t_b0$estadistico), "), pero su interpretación no es especialmente importante, ya que corresponde al nivel de ",
+                "la recta cuando t = 0, un período anterior al inicio de los datos. Lo más relevante en este ejemplo es la ",
+                "pendiente y el comportamiento de los residuos."))
 t_b1 <- .t_coeficiente(r"(\beta_1)", p$tabla$estimacion[2], p$tabla$ee_robusto[2], p$gl, T_est)
-pp(t_b1, paste0("La pendiente es ", n4(p$tabla$estimacion[2]), " pies por año, unos ", n2(abs(p$tabla$estimacion[2]) * T_est),
-                " pies de descenso acumulado en los ", T_est, " años. Se rechaza que sea nula con el error estándar robusto ",
-                "(t = ", n4(t_b1$estadistico), "), lo cual respalda la tendencia descendente. Con el error estándar ordinario el ",
-                "estadístico sería ", n4(p$tabla$estimacion[2] / p$tabla$ee_ordinario[2]), ": la conclusión sobre el signo no cambia, ",
-                "pero la evidencia estaría sobreestimada en un factor ", n2(p$tabla$ee_robusto[2] / p$tabla$ee_ordinario[2]), "."))
+pp(t_b1, paste0("La pendiente es β_1 = ", n4(p$tabla$estimacion[2]), " pies por año y el valor p con el error estándar robusto es ",
+                pv(t_b1$valor_p), " (t = ", n4(t_b1$estadistico), "). Por lo tanto, se rechaza que la pendiente sea cero y existe ",
+                "evidencia de una tendencia descendente. El uso del error robusto hace que la evidencia sea menor que con el error ",
+                "estándar normal (t = ", n4(p$tabla$estimacion[2] / p$tabla$ee_ordinario[2]), "), pero la conclusión sobre la ",
+                "pendiente negativa se mantiene."))
 ```
 
 **Varianza constante.** No hay una prueba formal en el protocolo; se revisa con el gráfico de residuos contra valores
@@ -1201,11 +1208,12 @@ ajustados.
 .grafico_residuos_ajustados(est$y - p$residuos, p$residuos, "Ejemplo 5. Residuos contra valores ajustados")
 ```
 
-Los residuos no forman un abanico: su amplitud es parecida para los valores ajustados bajos y altos (entre
-`r n2(min(p$residuos))` y `r n2(max(p$residuos))` pies), así que no hay evidencia de varianza no constante. Lo que sí se ve son
-ondas largas de residuos positivos y negativos, que es la autocorrelación ya detectada. Resumen de supuestos: la media cero y la
-normalidad se sostienen; la varianza es aproximadamente constante; la independencia se viola con claridad, y por eso la
-inferencia sobre los coeficientes se hace con el error estándar robusto.
+Los residuos no muestran un patrón claro de abanico (van de `r n2(min(p$residuos))` a `r n2(max(p$residuos))` pies), por
+lo que no hay evidencia visual fuerte de una varianza que cambie con el nivel. Sin embargo, sí aparecen ondas de
+residuos positivos y negativos, que coinciden con la autocorrelación detectada.
+
+En general, la normalidad y la varianza parecen razonables, pero la independencia no se cumple. Por eso es necesario
+utilizar errores estándar robustos para la inferencia.
 
 ## Gráfico final
 
@@ -1222,26 +1230,29 @@ resumen[[5]] <- .fila_resumen(5, "LakeHuron", fit, m_val, m_ref)
 
 ## Conclusión
 
-Se ajustó una tendencia lineal $\hat Y_t = `r n2(p$tabla$estimacion[1])` `r n4(p$tabla$estimacion[2])`\,t$ sobre los
-`r T_est` años de estimación (pendiente significativa con error estándar robusto: $t =$ `r n4(t_b1$estadistico)`, valor p
-`r pv(t_b1$valor_p)`). El ajuste dentro de la muestra tiene $R^2 =$ `r n4(p$r2)`, MSE `r n4(m_in$MSE)` y MASE `r n4(m_in$MASE)`. En los
-`r h` años de validación el MSE es `r n4(m_val$MSE)`, el MAD `r n4(m_val$MAD)` y el MASE `r n4(m_val$MASE)`, frente a
-`r n4(m_ref$MSE)`, `r n4(m_ref$MAD)` y `r n4(m_ref$MASE)` del ingenuo: gana por poco, `r n2(100 * (1 - m_val$MASE / m_ref$MASE))` % en
-MASE. La validación de los errores muestra el defecto del método: los residuos están autocorrelacionados (Ljung–Box con
-$m - p =$ `r ve$ljung_box$gl` grados de libertad, valor p `r pv(ve$ljung_box$valor_p)`; Durbin–Watson `r n4(ve$durbin_watson$estadistico)` frente a
-$d_L =$ `r n2(cot$dL)`), aunque son normales (Jarque–Bera, valor p `r pv(ve$jarque_bera$valor_p)`).
+La tendencia lineal estimada fue $\hat Y_t = `r n2(p$tabla$estimacion[1])` `r n4(p$tabla$estimacion[2])`\,t$ y la
+pendiente resultó significativa utilizando el error estándar robusto ($t =$ `r n4(t_b1$estadistico)`, valor p
+`r pv(t_b1$valor_p)`). En validación, el método obtuvo un MASE de `r n4(m_val$MASE)` frente a `r n4(m_ref$MASE)` del
+ingenuo, por lo que sí mejora, aunque por un margen pequeño de `r n2(100 * (1 - m_val$MASE / m_ref$MASE))` %.
+
+El principal problema aparece en los residuos. Ljung–Box (valor p `r pv(ve$ljung_box$valor_p)`) y Durbin–Watson
+(`r n4(ve$durbin_watson$estadistico)` frente a $d_L =$ `r n2(cot$dL)`) muestran una autocorrelación importante, aunque la
+prueba de Jarque–Bera (valor p `r pv(ve$jarque_bera$valor_p)`) no encuentra problemas de normalidad.
+
+Por lo tanto, la tendencia lineal logra captar parte del comportamiento general de la serie, pero todavía queda una
+estructura importante que el modelo no explica.
 
 ## Recomendación
 
-El pronóstico le sirve a quien necesite una referencia de largo plazo del nivel del lago, por ejemplo una autoridad de
-navegación o de aprovechamiento del agua, para un horizonte de unos pocos años. En validación la recta fue mejor que el
-ingenuo en los primeros `r which(abs(e_m) > abs(e_r))[1] - 1` años de horizonte y peor después: el error de la recta crece de
-`r n2(abs(e_m[1]))` pies en $h = 1$ a `r n2(abs(e_m[h]))` en $h = `r h`$, mientras que el del ingenuo va de `r n2(abs(e_r[1]))` a
-`r n2(abs(e_r[h]))`. El límite es que la recta sigue bajando (`r n2(pron[1])` a `r n2(pron[h])` pies) cuando el lago
-se recuperó (de `r n2(val$y[1])` a `r n2(val$y[h])`): una tendencia determinista no puede seguir un nivel que cambia de
-sentido, y a `r h` años el error de `r n2(abs(e_m[h]))` pies es `r n2(abs(e_m[h]) / sd(d$y))` veces la desviación estándar de toda
-la serie (`r n2(sd(d$y))`). Más allá de unos pocos años conviene reestimar la recta con datos nuevos o usar un método con
-nivel local.
+La tendencia lineal puede servir como una referencia para algunos años hacia adelante, pero no es conveniente extenderla
+demasiado. En la validación fue mejor que el ingenuo durante los primeros `r which(abs(e_m) > abs(e_r))[1] - 1` años,
+pero después comenzó a tener errores mayores.
+
+El problema es que la recta continúa disminuyendo (de `r n2(pron[1])` a `r n2(pron[h])` pies) mientras el lago
+posteriormente cambia de comportamiento (de `r n2(val$y[1])` a `r n2(val$y[h])` pies). En el horizonte `r h` el error
+llega a `r n2(abs(e_m[h]))` pies, `r n2(abs(e_m[h]) / sd(d$y))` veces la desviación estándar de toda la serie
+(`r n2(sd(d$y))`). Por eso, para períodos más largos sería mejor actualizar la tendencia con nuevos datos o utilizar un
+método que permita que el nivel cambie con el tiempo.
 
 # Ejemplo 6. Tendencia cuadrática sobre `airmiles`
 
