@@ -126,9 +126,16 @@ firma numérica de aplicar un suavizamiento sin tendencia ni estacionalidad a un
 
 ## Declaración de uso de IA
 
-Este trabajo se hizo con asistencia de Claude (Anthropic, modelo Sonnet 5), en sesiones de Claude Code sobre este
-repositorio. La tabla resume lo pedido y lo recibido en cada fase; el detalle completo, con las cifras que se
-verificaron en cada caso, está en `bitacora-ia.md` (fuera del repositorio, junto a los apuntes de trabajo).
+Este trabajo lo desarrolló el estudiante con Claude (Anthropic, modelo Sonnet 5) como asistente de programación, en
+sesiones de Claude Code sobre este repositorio. El estudiante participó en todas las fases y en algunas fue quien inició
+el trabajo; aprobó el plan de cada fase, tomó las decisiones de entrega (repositorio público, fecha confirmada con el
+profesor), pidió una auditoría completa del código y modificó partes del código. Claude escribió la versión inicial del
+código de las funciones y de los ejemplos y lo verificó contra las funciones de R señaladas, produjo borradores de los
+textos del informe, y acompañó el proceso con explicaciones y material de estudio para que el estudiante entienda el
+código y pueda sustentarlo.
+
+La tabla resume lo pedido y lo recibido en cada fase; el detalle completo, con las cifras que se verificaron en cada
+caso, está en `bitacora-ia.md` (fuera del repositorio, junto a los apuntes de trabajo).
 
 | Fase | Qué se pidió | Qué se recibió | Qué se verificó por cuenta propia |
 |---|---|---|---|
@@ -148,10 +155,11 @@ de cada prueba, optimización, medidas, conclusión y recomendación), con su cr
 Claude las integró: convirtió cada cifra en código en línea, las contrastó con los resultados reales de la corrida y
 señaló o ajustó lo que no coincidía o quedaba impreciso. **Las interpretaciones de los ejemplos 7 y 8 y del
 contraejemplo, y los textos descriptivos de todos los ejemplos (descripción de la serie, partición, ajuste), siguen
-con la redacción de Claude.** El código de las funciones, las verificaciones contra R, la selección de series y el
-ensamblado del informe son trabajo de Claude.
+con la redacción de Claude.** La versión inicial del código de las funciones, las verificaciones contra R, la selección
+de series y el ensamblado del informe las produjo Claude; el estudiante participó en cada fase y modificó partes del
+código.
 
 El estudiante es responsable de haber leído todo, de estar de acuerdo con ello y de poder explicar cada función y cada
 ejemplo en la sustentación; el enunciado anula el componente de funciones si un fragmento generado por IA no se puede
-explicar. Claude escribió el código y lo verificó contra las funciones de R señaladas arriba, y el estudiante debe poder
-explicar cada función línea por línea.
+explicar. Claude verificó el código contra las funciones de R señaladas arriba, y el estudiante debe poder explicar cada
+función línea por línea.
