@@ -1631,7 +1631,7 @@ pp(ve_log$jarque_bera, paste0("JB = ", n4(ve_log$jarque_bera$estadistico), " con
                               n4(ve_log$jarque_bera$K), ": los residuos en logaritmos son prácticamente normales. La log-transformación ",
                               "estabilizó los errores, lo que respalda usar la escala logarítmica."))
 pp(ve_log$durbin_watson, paste0("d = ", n4(ve_log$durbin_watson$estadistico), " supera d_U = ", n2(cot$dU), " (N = ", ve_log$n,
-                                ", k' = 1): no se rechaza la autocorrelación positiva de orden uno en logaritmos. Confirma que el problema de la ",
+                                ", k' = 1): no se rechaza la ausencia de autocorrelación positiva de orden uno en logaritmos. Confirma que el problema de la ",
                                 "regresión no es la dependencia de un trimestre con el anterior, sino la estacional."))
 ```
 
@@ -1693,8 +1693,9 @@ normales (valor p `r pv(ve_log$jarque_bera$valor_p)`) y sin autocorrelación de 
 
 El pronóstico le sirve a quien siga el crecimiento de largo plazo de la ganancia por acción, por ejemplo un analista que quiera la
 trayectoria esperada del año siguiente, y no a quien necesite el valor de un trimestre concreto. El límite es la estacionalidad:
-en validación el método sobrestima el cuarto trimestre de forma sistemática, con un error medio (observado menos pronóstico) de
-`r n2(mean(e_m[seq(s, h, by = s)]))` dólares en esos trimestres (`r paste0(n2(abs(e_m[seq(s, h, by = s)])), collapse = ", ")` en los tres años,
+en validación el método sobrestima el cuarto trimestre de forma sistemática: el pronóstico supera lo observado en
+`r n2(-mean(e_m[seq(s, h, by = s)]))` dólares en promedio en esos trimestres (errores absolutos de
+`r paste0(n2(abs(e_m[seq(s, h, by = s)])), collapse = ", ")` en los tres años,
 `r paste0(n2(100 * abs(e_m[seq(s, h, by = s)]) / val$y[seq(s, h, by = s)]), collapse = " %, ")` % del valor observado), frente a
 `r n2(mean(abs(e_m[-seq(s, h, by = s)])))` dólares de error absoluto medio en los demás trimestres. Por eso el horizonte razonable es de un año
 para el nivel anual, con el pronóstico trimestral usado con reserva; para pronosticar cada trimestre haría falta un
@@ -2082,7 +2083,9 @@ es una línea prácticamente plana que no repite el ciclo que la propia serie de
 Se ajustó un suavizamiento exponencial simple con $\alpha =$ `r n2(opt$optimo$alpha)`, en el borde superior de la
 rejilla, sobre los `r T_est` meses de estimación. En los `r h` meses de validación el MASE es `r n4(m_val$MASE)`,
 frente a `r n4(m_ref$MASE)` del ingenuo estacional: el método **pierde** frente a un referente que se limita a repetir
-el ciclo anterior, algo que no ocurrió en ninguno de los ocho ejemplos previos (ver la tabla resumen). La validación de
+el ciclo anterior, algo que entre los ocho ejemplos previos solo ocurrió en el ejemplo
+`r paste(which(vapply(resumen[1:8], function(f) f$MASE_metodo >= f$MASE_referente, TRUE)), collapse = ", ")`, por un margen
+mínimo (ver la tabla resumen). La validación de
 errores confirma el mecanismo de la falla: el error medio es nulo (valor p `r pv(ve$t_media$valor_p)`), pero Ljung-Box
 rechaza con fuerza (valor p `r pv(ve$ljung_box$valor_p)`) por una autocorrelación estacional en r_`r s` =
 `r n4(ve$correlograma$acf[s])`, muy por fuera de la banda de ±`r n4(ve$correlograma$banda)`, y Durbin-Watson también
