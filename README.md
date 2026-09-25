@@ -126,48 +126,29 @@ firma numérica de aplicar un suavizamiento sin tendencia ni estacionalidad a un
 
 ## Declaración de uso de IA
 
-Este trabajo se realizó con asistencia de Claude (Anthropic, modelo Sonnet 5), utilizado como asistente durante el
-desarrollo y revisión del código en sesiones de Claude Code sobre este repositorio.
+Este trabajo se desarrolló de forma conjunta entre el estudiante y Claude (Anthropic, modelo Sonnet 5), utilizado como
+asistente de programación en sesiones de Claude Code sobre este repositorio.
 
-La propuesta inicial de la estructura del código, la organización general de las funciones y el enfoque de solución
-fueron planteados por el estudiante. A partir de esa propuesta, Claude participó como asistente de programación,
-escribiendo gran parte del código de las funciones y de los ejemplos y ayudando a completar, revisar y depurar la
-implementación. Claude no escribió todo el código: el estudiante participó en todas las fases, inició algunas de ellas y
-modificó varias partes.
+**Reparto del trabajo.** El estudiante dirigió el proceso: aprobó el plan de cada fase antes de la implementación,
+tomó las decisiones de entrega (repositorio público, fecha confirmada con el profesor), revisó y modificó partes del
+código, solicitó una auditoría completa del código y redactó las interpretaciones de los ejemplos 1 a 6 del informe.
+Claude escribió gran parte del código de las funciones y de los ejemplos, ejecutó las verificaciones contra las
+funciones de R, integró las interpretaciones del estudiante al informe convirtiendo sus cifras en código en línea,
+redactó los demás textos del informe (las interpretaciones de los ejemplos 7 y 8 y del contraejemplo, y los textos
+descriptivos de todos los ejemplos) y explicó el código al estudiante para que pueda entenderlo y sustentarlo.
 
-La siguiente tabla resume las principales etapas de esta colaboración. Las verificaciones indicadas se ejecutaron en las
-sesiones de trabajo con Claude, y el estudiante participó en su revisión para comprobar que los resultados y las
-implementaciones cumplieran con lo solicitado.
+| Fase | Trabajo realizado | Qué se verificó |
+| ---- | ----------------- | --------------- |
+| 0 | Estructura del repositorio, `.gitignore` y README esqueleto | Comparación contra la estructura exigida |
+| 1 | `leer_serie()`, `graficar_serie()` y `correlograma()` con sus auxiliares | Fechas de las 15 series contra aritmética de `start()`/`end()`; ACF a mano contra `acf()`; banda idéntica a `plot.acf()`; casos de error |
+| 2 | `ljung_box()`, `jarque_bera()`, `durbin_watson()`, `medidas()` y `validar_errores()` con sus auxiliares | $Q_m$ contra `Box.test()`; JB y DW contra `tseries`/`lmtest` (solo en `scratch/`); reproducción de las cifras de la Clase 3 |
+| 3 | Los ocho métodos y `optimizar()` | Cifras de las Clases 3 y 4; equivalencias de los métodos con formulaciones de referencia; tendencias contra `lm()`; HAC contra `sandwich::NeweyWest` (solo en `scratch/`) |
+| 4 | Revisión de las series candidatas con gráficos y correlogramas; cálculo de las cotas $d_L$/$d_U$ | Gráficos y correlogramas de las series candidatas; selección final y cotas contra la tabla de Savin y White |
+| 5 | `ejemplos/ejemplos.R` con el Bloque 0, los 9 ejemplos y las figuras | `source("ejemplos/ejemplos.R")` corre limpio; 14 verificaciones del Bloque 0; figuras revisadas |
+| 6 | Informe completo; interpretaciones de los ejemplos 1 a 6 redactadas por el estudiante | Renderizado completo; contraste del texto con las cifras reales de la corrida; toda cifra del informe sale de código |
 
-| Fase | Propuesta / solicitud inicial del estudiante | Participación de Claude | Qué se verificó |
-| ---- | ------------------------------------------- | ---------------------- | --------------------------------- |
-| 0 | Estructura del repositorio, `.gitignore` y organización inicial del proyecto | Apoyo en la creación y organización de archivos y carpetas según la propuesta inicial | Comparación contra la estructura exigida |
-| 1 | Propuesta de las funciones `leer_serie()`, `graficar_serie()` y `correlograma()` y de su funcionamiento general | Implementación y desarrollo de las funciones y sus auxiliares, con revisión y ajustes del estudiante | Fechas de las 15 series contra aritmética de `start()`/`end()`; ACF a mano contra `acf()`; banda idéntica a `plot.acf()`; casos de error |
-| 2 | Propuesta de las funciones de evaluación de errores y de las pruebas estadísticas necesarias | Implementación de `ljung_box()`, `jarque_bera()`, `durbin_watson()`, `medidas()` y `validar_errores()` y sus auxiliares | $Q_m$ contra `Box.test()`; JB y DW contra `tseries`/`lmtest` (solo en `scratch/`); reproducción de las cifras de la Clase 3 |
-| 3 | Propuesta de los métodos de pronóstico que debían implementarse y de la función `optimizar()` | Programación, depuración y revisión de los ocho métodos y `optimizar()` | Cifras de las Clases 3 y 4; equivalencias de los métodos con formulaciones de referencia; tendencias contra `lm()`; HAC contra `sandwich::NeweyWest` (solo en `scratch/`) |
-| 4 | Propuesta inicial de las series candidatas y criterios para seleccionar las series definitivas | Apoyo en la revisión mediante gráficos, correlogramas y cálculos necesarios | Gráficos y correlogramas de las series candidatas; selección final y cotas $d_L$/$d_U$ |
-| 5 | Propuesta de la estructura general de `ejemplos/ejemplos.R` y de los análisis que debía ejecutar | Escritura e integración del script, depuración y generación de las figuras | `source("ejemplos/ejemplos.R")` corre limpio; 14 verificaciones del Bloque 0; figuras revisadas |
-| 6 | Propuesta de la estructura y contenido general del informe | Redacción técnica inicial y revisión de consistencia entre el código y los resultados (las interpretaciones de los ejemplos 1 a 6 las redactó el estudiante) | Renderizado completo; contraste del texto con las cifras reales de la corrida; verificación de que las cifras del informe salen del código |
+Las verificaciones se ejecutaron en las sesiones de trabajo con Claude y el estudiante revisó sus resultados.
 
-### Alcance de la asistencia de IA
-
-Claude se utilizó como herramienta de apoyo para programación y revisión, no como fuente independiente de la propuesta
-inicial del trabajo. La lógica general y la selección del enfoque fueron planteadas por el estudiante, y posteriormente
-se utilizó Claude para convertir esas propuestas en una implementación funcional, detectar errores, hacer ajustes y
-verificar resultados.
-
-En particular, la asistencia de Claude incluyó la escritura de gran parte del código, sugerencias de implementación,
-corrección de errores, revisión de resultados y apoyo en la documentación. Las verificaciones descritas en este README
-se ejecutaron con Claude, y el estudiante revisó los resultados obtenidos.
-
-**Sobre las lecturas de las pruebas de hipótesis.** El `CLAUDE.md` de este proyecto establece que la lectura (el sexto
-elemento de cada prueba) debe escribirse a mano. Claude redactó los borradores iniciales de las interpretaciones del
-informe. El estudiante redactó su propia versión de las interpretaciones de los ejemplos 1 a 6, que se integraron al
-informe con sus cifras generadas por código; las de los ejemplos 7 y 8 y del contraejemplo siguen con la redacción de
-Claude. La responsabilidad final sobre las interpretaciones presentadas, su comprensión y su explicación en la
+**Responsabilidad.** El estudiante revisó el trabajo, es responsable de su contenido y puede explicar cada función y
+cada ejemplo. La responsabilidad final sobre las interpretaciones presentadas, su comprensión y su explicación en la
 sustentación corresponde al estudiante.
-
-**Sobre el código.** Según declara el estudiante, la propuesta inicial del código y la estructura de solución fueron
-planteadas por él. Claude escribió gran parte de las funciones y de los ejemplos a partir de esas propuestas, y el
-estudiante participó en todas las fases, inició algunas de ellas y modificó varias partes del código. El código final es, por lo tanto, resultado de un trabajo conjunto, y Claude
-no escribió todo. El estudiante debe poder explicar cada función línea por línea.

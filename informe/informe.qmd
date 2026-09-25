@@ -124,10 +124,10 @@ Estas son las que determinan las cifras de este documento.
 
 ### Sobre el uso de IA {-}
 
-Este trabajo lo desarrolló el estudiante con Claude (Anthropic) como asistente de programación. La estructura de solución
-la planteó el estudiante; Claude escribió gran parte del código de las funciones y de los ejemplos, las verificaciones
-contra R, el ensamblado del informe y los borradores de redacción. Claude no escribió todo el código: el estudiante
-participó en todas las fases, inició algunas de ellas y modificó varias partes. Las interpretaciones de los ejemplos 1 a 6 (lectura
+Este trabajo se desarrolló de forma conjunta entre el estudiante y Claude (Anthropic), utilizado como asistente de
+programación. El estudiante dirigió el proceso, aprobó el plan de cada fase, revisó y modificó partes del código;
+Claude escribió gran parte del código de las funciones y de los ejemplos, ejecutó las verificaciones contra R y
+ensambló el informe. Las interpretaciones de los ejemplos 1 a 6 (lectura
 del patrón, lectura de cada prueba, optimización, medidas, conclusión y recomendación) las redactó el estudiante; Claude
 las integró convirtiendo cada cifra en código en línea y contrastándolas con los resultados de la corrida. Las
 interpretaciones de los ejemplos 7 y 8 y del contraejemplo, y los textos descriptivos de todos los ejemplos, siguen con
