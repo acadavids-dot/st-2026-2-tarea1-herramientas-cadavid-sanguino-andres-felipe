@@ -313,26 +313,33 @@ Contraste individual de las autocorrelaciones que sostienen la lectura y prueba 
 #| results: asis
 n_total <- nrow(d)
 r_1 <- .contraste_rh(cg$acf, n_total, 1)
-pp(r_1, paste0("La autocorrelación en el rezago 1 es ", n4(cg$acf[1]), ", mayor que la banda de ±", n4(cg$banda),
-               ": cada año se parece algo al anterior. Es la más grande de un grupo pequeño: ",
-               sum(abs(cg$acf) > cg$banda), " de los ", cg$m, " rezagos salen de la banda, todos entre los primeros."))
+pp(r_1, paste0("La autocorrelación en el rezago 1 fue de ", n4(cg$acf[1]), " y quedó por encima de la banda de ±", n4(cg$banda),
+               ", por lo que se rechaza la hipótesis de que sea igual a cero. Esto indica que existe cierta relación entre los ",
+               "descubrimientos de un año y los del año anterior. Aun así, solo ", sum(abs(cg$acf) > cg$banda), " de los ", cg$m,
+               " rezagos están por fuera de la banda y todos se encuentran en los primeros rezagos, por lo que la dependencia ",
+               "no parece mantenerse durante mucho tiempo."))
 r_4 <- .contraste_rh(cg$acf, n_total, 4)
-pp(r_4, paste0("En el rezago 4 la autocorrelación baja a ", n4(cg$acf[4]), ", dentro de la banda de ±", n4(cg$banda),
-               ": la memoria de la serie se agota en pocos años. Una tendencia, en cambio, mantendría autocorrelaciones ",
-               "positivas y lentas en decaer, y aquí no ocurre."))
+pp(r_4, paste0("En el rezago 4 la autocorrelación baja hasta ", n4(cg$acf[4]), " y queda dentro de la banda de ±", n4(cg$banda),
+               ". Por lo tanto, no se rechaza que sea cero. Esto muestra que la relación entre los años se va perdiendo después ",
+               "de los primeros rezagos. Si existiera una tendencia clara, se esperaría que las autocorrelaciones se mantuvieran ",
+               "positivas durante más tiempo, cosa que aquí no sucede."))
 lb0 <- ljung_box(cg$acf, n_total, cg$m, 0)
-pp(lb0, paste0("Con Q = ", n4(lb0$estadistico), " y ", lb0$gl, " grados de libertad el valor p es ", pv(lb0$valor_p),
-               ", apenas por encima del 5 %: no se rechaza que las primeras ", cg$m, " autocorrelaciones sean nulas, aunque la ",
-               "evidencia está en el límite. La dependencia de la serie es débil y de corto alcance."))
+pp(lb0, paste0("El estadístico Ljung–Box fue ", n4(lb0$estadistico), " y el valor p fue ", pv(lb0$valor_p),
+               ". Como está ligeramente por encima del 5 %, no se rechaza la hipótesis nula. Esto indica que, considerando los ",
+               "primeros ", cg$m, " rezagos en conjunto, no hay suficiente evidencia para decir que exista una dependencia fuerte. ",
+               "De todas formas, el resultado está muy cerca del límite, así que no se puede afirmar que la serie no tenga ninguna ",
+               "estructura, sino que la dependencia que presenta es relativamente débil y se concentra principalmente en los ",
+               "primeros rezagos."))
 ```
 
-**Lectura del patrón.** La serie oscila alrededor de un nivel de unos tres descubrimientos por año, sin tendencia
-apreciable: la recta de tendencia explica solo el `r n2(100 * cor(seq_len(n_total), d$y)^2)` % de la
-variación, y el promedio de la primera mitad (`r n2(mean(d$y[1:50]))`) y el de la segunda (`r n2(mean(d$y[51:100]))`)
-difieren en menos de una desviación estándar (`r n2(sd(d$y))`). Ese es el supuesto de la media simple: un nivel
-constante con perturbaciones sin estructura, de modo que el mejor pronóstico a cualquier horizonte es la media.
-El supuesto se cumple de forma aproximada y no exacta: hay una autocorrelación débil en los primeros rezagos y una
-ligera deriva a la baja del nivel, que se retomarán al validar los errores.
+**Lectura del patrón.** La serie se mantiene alrededor de unos `r round(mean(d$y))` descubrimientos por año y no se
+observa una tendencia clara. La recta de tendencia solo explica el `r n2(100 * cor(seq_len(n_total), d$y)^2)` % de la
+variación y los promedios de las dos mitades de la serie son relativamente cercanos, `r n2(mean(d$y[1:50]))` y
+`r n2(mean(d$y[51:100]))`. Por esto, usar una media simple tiene sentido, ya que el método supone que la serie se
+mantiene alrededor de un nivel más o menos constante.
+
+Sin embargo, el supuesto no se cumple perfectamente, porque hay una pequeña autocorrelación en los primeros rezagos y
+se nota una ligera disminución del nivel. Esto se revisará con las pruebas sobre los errores.
 
 ## Partición
 
@@ -383,24 +390,28 @@ $m = `r ve$correlograma$m`$ rezagos y banda de ±`r n4(ve$correlograma$banda)`, 
 ```{r}
 #| label: ej1-pruebas-errores
 #| results: asis
-pp(ve$t_media, paste0("El error medio de un paso es ", n4(mean(ve$e)), " con desviación ", n4(sd(ve$e)),
-                      ": no se distingue de cero, así que dentro de la muestra la media simple no sobrestima ni subestima ",
-                      "en promedio."))
-pp(ve$ljung_box, paste0("Con Q = ", n4(ve$ljung_box$estadistico), " y ", ve$ljung_box$gl, " grados de libertad (m = ",
-                        ve$correlograma$m, ", p = 0) no se rechaza que los errores sean incorrelacionados en conjunto, aunque ",
-                        "individualmente r_1 = ", n4(ve$correlograma$acf[1]), " y r_2 = ", n4(ve$correlograma$acf[2]),
-                        " superan la banda de ±", n4(ve$correlograma$banda), ": el estadístico conjunto reparte la evidencia entre ",
-                        ve$correlograma$m, " rezagos y pierde potencia frente a una dependencia que solo vive en los primeros."))
-pp(ve$jarque_bera, paste0("JB = ", n4(ve$jarque_bera$estadistico), " con asimetría ", n4(ve$jarque_bera$A),
-                          " y curtosis ", n4(ve$jarque_bera$K), " (la normal tiene 0 y 3): los errores tienen cola derecha pesada, ",
-                          "como corresponde a un conteo que llega a ", max(d$y), " y no baja de cero. Con N = ", ve$n,
-                          " la prueba t de media cero sigue siendo razonable por el teorema central del límite, pero se ",
-                          "anota que la normalidad no se cumple."))
-pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " queda por debajo de d_L = ", n2(cot$dL),
-                            " (N = ", ve$n, ", k' = 1): hay autocorrelación positiva de orden uno, con ρ ≈ ",
-                            n4(ve$durbin_watson$rho_aprox), ", coherente con r_1 = ", n4(ve$correlograma$acf[1]),
-                            ". Durbin–Watson, que apunta a una sola alternativa (AR(1)), detecta lo que Ljung–Box, que ",
-                            "reparte su potencia entre muchos rezagos, no alcanza a rechazar."))
+pp(ve$t_media, paste0("El error medio fue ", n4(mean(ve$e)), ", con una desviación de ", n4(sd(ve$e)), ", y el valor p fue ",
+                      pv(ve$t_media$valor_p), ". Como no se rechaza la hipótesis de media cero, no hay evidencia de que el método ",
+                      "sobrestime o subestime sistemáticamente los valores dentro de la muestra."))
+pp(ve$ljung_box, paste0("El valor p fue ", pv(ve$ljung_box$valor_p), ", por lo que no se rechaza que los errores sean ",
+                        "incorrelacionados en conjunto. Sin embargo, los rezagos ",
+                        paste(which(abs(ve$correlograma$acf) > ve$correlograma$banda), collapse = " y "),
+                        " sí están por fuera de la banda, con autocorrelaciones de ", n4(ve$correlograma$acf[1]), " y ",
+                        n4(ve$correlograma$acf[2]), ". Esto muestra que la prueba conjunta no detecta una estructura ",
+                        "suficientemente fuerte cuando se consideran todos los rezagos al mismo tiempo, aunque sí existe cierta ",
+                        "relación en los primeros."))
+pp(ve$jarque_bera, paste0("La prueba de Jarque–Bera dio un valor p ", pv(ve$jarque_bera$valor_p), ", por lo que se rechaza ",
+                          "la normalidad de los errores. Esto se puede relacionar con que la variable es un conteo y puede tomar ",
+                          "valores bastante alejados del promedio hacia la derecha. Aunque los errores no sean normales, la ",
+                          "prueba t de media cero sigue siendo razonable en este caso por el tamaño de la muestra, que es de ",
+                          ve$n, " errores."))
+pp(ve$durbin_watson, paste0("El estadístico Durbin–Watson fue ", n4(ve$durbin_watson$estadistico), " y quedó por debajo de d_L = ",
+                            n2(cot$dL), ", por lo que se rechaza la ausencia de autocorrelación positiva de orden uno. Esto ",
+                            "coincide con el resultado de la ACF, donde r_1 = ", n4(ve$correlograma$acf[1]), ". En otras ",
+                            "palabras, todavía queda cierta información del error anterior que la media simple no está ",
+                            "utilizando. Que Durbin–Watson detecte un problema que Ljung–Box no alcanzó a rechazar es ",
+                            "compatible con que las pruebas tienen potencia distinta: Durbin–Watson apunta a una sola alternativa ",
+                            "(autocorrelación de orden uno), mientras que Ljung–Box reparte su potencia entre todos los rezagos."))
 ```
 
 ## Gráfico final
@@ -418,28 +429,28 @@ resumen[[1]] <- .fila_resumen(1, "discoveries", fit, m_val, m_ref)
 
 ## Conclusión
 
-Se ajustó la media simple sobre los `r T_est` años de estimación (`r format(est$fecha[1], "%Y")`–`r format(est$fecha[T_est], "%Y")`),
-con un nivel estimado de `r n4(fit$parametros$media)` descubrimientos por año. Dentro de la muestra, a un paso,
-el MSE es `r n4(m_in$MSE)`, el MAD `r n4(m_in$MAD)` y el MASE `r n4(m_in$MASE)` sobre `r m_in$N` errores. Sobre los
-`r h` años de validación el MSE es `r n4(m_val$MSE)`, el MAD `r n4(m_val$MAD)` y el MASE `r n4(m_val$MASE)`, frente
-a `r n4(m_ref$MSE)`, `r n4(m_ref$MAD)` y `r n4(m_ref$MASE)` del ingenuo: la media simple gana al ingenuo y reduce su
-MSE en `r n2(100 * (1 - m_val$MSE / m_ref$MSE))` %. La validación de errores muestra un error medio indistinguible de
-cero (valor p `r pv(ve$t_media$valor_p)`) y autocorrelación conjunta no significativa (Ljung–Box, valor p
-`r pv(ve$ljung_box$valor_p)`), pero también autocorrelación positiva de orden uno (Durbin–Watson
-`r n4(ve$durbin_watson$estadistico)` frente a $d_L =$ `r n2(cot$dL)`) y errores no normales (Jarque–Bera, valor p
-`r pv(ve$jarque_bera$valor_p)`). Que gane al ingenuo es esperable en una serie sin tendencia: el ingenuo hereda todo
-el ruido del último año y la media lo promedia.
+Se utilizó la media simple sobre los `r T_est` años de estimación, obteniendo un nivel promedio de
+`r n4(fit$parametros$media)` descubrimientos por año. En la validación, el MASE fue `r n4(m_val$MASE)` frente a
+`r n4(m_ref$MASE)` del pronóstico ingenuo y el MSE se redujo en `r n2(100 * (1 - m_val$MSE / m_ref$MSE))` %, por lo que la
+media simple tuvo un mejor comportamiento que el ingenuo en este caso.
+
+Las pruebas de los errores muestran que no hay un sesgo importante, ya que el valor p de la prueba t fue
+`r pv(ve$t_media$valor_p)`. Tampoco se encontró autocorrelación conjunta significativa con Ljung–Box. Sin embargo,
+Durbin–Watson sí detectó autocorrelación positiva de orden uno y la prueba de Jarque–Bera rechazó la normalidad.
+
+En general, el método funciona razonablemente bien porque la serie no presenta una tendencia marcada. Aun así, los
+errores muestran que la serie tiene algo de dependencia que la media simple no alcanza a aprovechar.
 
 ## Recomendación
 
-El pronóstico le sirve a quien necesite el número esperado de descubrimientos por año en un horizonte de pocos años
-y sin exigir precisión de un año concreto, por ejemplo para dimensionar un archivo o un boletín de novedades. Como
-la media simple da una línea plana, el horizonte razonable es corto: en los `r h` años de validación el MASE fue
-`r n4(m_val$MASE)` y el método se apoya en que el nivel no cambie. El límite está en esa deriva del nivel: el
-pronóstico de `r n2(pron[1])` sobrestimó en `r sum(val$y - pron < 0)` de los `r h` años, con un error medio de validación de
-`r n2(mean(val$y - pron))` descubrimientos por año (`r n2(100 * mean(val$y - pron) / pron[1])` % del nivel pronosticado),
-porque el nivel real de esos años (`r n2(mean(val$y))`) ya estaba por debajo del promedio histórico. Si el nivel
-sigue bajando, un método con memoria local (media móvil o suavizamiento exponencial) reaccionaría antes.
+Este pronóstico puede ser útil para tener una idea general del número esperado de descubrimientos por año,
+especialmente cuando no se necesita predecir con mucha precisión un año específico. En la validación obtuvo un MASE de
+`r n4(m_val$MASE)`, por lo que tuvo un mejor resultado que el ingenuo.
+
+El principal problema es que el nivel de la serie parece estar disminuyendo. El pronóstico queda fijo en
+`r n2(pron[1])`, pero en `r sum(val$y - pron < 0)` de los `r h` años de validación terminó sobrestimando el número de
+descubrimientos. Por eso, si la disminución del nivel continúa, sería más conveniente utilizar un método que dé mayor
+peso a los datos recientes.
 
 # Ejemplo 2. Media móvil sobre `Nile`
 
