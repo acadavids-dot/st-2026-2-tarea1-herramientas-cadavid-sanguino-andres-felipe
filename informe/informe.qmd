@@ -33,6 +33,12 @@ estadísticos cuatro cifras y los valores p tres (`< 0,001` cuando corresponde).
 invisible(lapply(sort(list.files("../R", pattern = "\\.R$", full.names = TRUE)), source))
 set.seed(2026)  # ningún paso del informe es aleatorio; se fija por regla del enunciado
 knitr::opts_chunk$set(fig.width = 8, fig.height = 4.6, fig.align = "center", out.width = "92%")
+resumen <- list()  # cada ejemplo agrega su fila (ejemplo, serie, método, MASE del método y del referente)
+# Misma definición que en ejemplos/ejemplos.R: una fila del resumen final.
+.fila_resumen <- function(ejemplo, serie, fit, m_val, m_ref) {
+  data.frame(ejemplo = ejemplo, serie = serie, metodo = fit$metodo,
+             MASE_metodo = m_val$MASE, MASE_referente = m_ref$MASE)
+}
 
 # Formato de las cifras del texto: coma decimal, 4 cifras (n4), 2 cifras (n2), valor p (pv)
 n4 <- function(x) .fmt_num(x, 4)
@@ -404,6 +410,12 @@ pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " queda po
 .grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 1. Media simple: ajuste y pronóstico")
 ```
 
+```{r}
+#| label: ej1-resumen
+#| include: false
+resumen[[1]] <- .fila_resumen(1, "discoveries", fit, m_val, m_ref)
+```
+
 ## Conclusión
 
 Se ajustó la media simple sobre los `r T_est` años de estimación (`r format(est$fecha[1], "%Y")`–`r format(est$fecha[T_est], "%Y")`),
@@ -578,6 +590,12 @@ pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " supera d
 ```{r}
 #| label: ej2-final
 .grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 2. Media móvil: ajuste y pronóstico")
+```
+
+```{r}
+#| label: ej2-resumen
+#| include: false
+resumen[[2]] <- .fila_resumen(2, "Nile", fit, m_val, m_ref)
 ```
 
 ## Conclusión
@@ -762,6 +780,12 @@ pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " supera d
 .grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 3. Suavizamiento exponencial simple: ajuste y pronóstico")
 ```
 
+```{r}
+#| label: ej3-resumen
+#| include: false
+resumen[[3]] <- .fila_resumen(3, "Nile", fit, m_val, m_ref)
+```
+
 ## Conclusión
 
 Se ajustó un suavizamiento exponencial simple con $\alpha =$ `r n2(opt$optimo$alpha)`, elegida por `optimizar()`
@@ -938,6 +962,12 @@ pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " supera d
 ```{r}
 #| label: ej4-final
 .grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 4. Doble media móvil: ajuste y pronóstico")
+```
+
+```{r}
+#| label: ej4-resumen
+#| include: false
+resumen[[4]] <- .fila_resumen(4, "austres", fit, m_val, m_ref)
 ```
 
 ## Conclusión
@@ -1144,6 +1174,12 @@ inferencia sobre los coeficientes se hace con el error estándar robusto.
 ```{r}
 #| label: ej5-final
 .grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 5. Tendencia lineal: ajuste y pronóstico")
+```
+
+```{r}
+#| label: ej5-resumen
+#| include: false
+resumen[[5]] <- .fila_resumen(5, "LakeHuron", fit, m_val, m_ref)
 ```
 
 ## Conclusión
@@ -1365,6 +1401,12 @@ tendencia, no toda la dinámica.
 ```{r}
 #| label: ej6-final
 .grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 6. Tendencia cuadrática: ajuste y pronóstico")
+```
+
+```{r}
+#| label: ej6-resumen
+#| include: false
+resumen[[6]] <- .fila_resumen(6, "airmiles", fit, m_val, m_ref)
 ```
 
 ## Conclusión
@@ -1628,6 +1670,12 @@ a la tendencia y por eso el método sigue siendo útil, pero es lo que las prueb
                     nombre_referente = "Referente ingenuo estacional")
 ```
 
+```{r}
+#| label: ej7-resumen
+#| include: false
+resumen[[7]] <- .fila_resumen(7, "JohnsonJohnson", fit, m_val, m_ref)
+```
+
 ## Conclusión
 
 Se ajustó una tendencia exponencial $\hat Y_t = `r n4(p$coef_exp[[1]])` \cdot `r n4(p$coef_exp[[2]])`^{\,t}$ sobre los
@@ -1838,6 +1886,12 @@ un efecto de la inicialización sobre un solo dato, y el de Ljung–Box refleja 
 .grafico_pronostico(d, fit$yhat, pron, ref, "Ejemplo 8. Holt: ajuste y pronóstico")
 ```
 
+```{r}
+#| label: ej8-resumen
+#| include: false
+resumen[[8]] <- .fila_resumen(8, "austres", fit, m_val, m_ref)
+```
+
 ## Conclusión
 
 Se ajustó un Holt lineal con $\alpha =$ `r n2(opt$optimo$alpha)` y $\beta =$ `r n2(opt$optimo$beta)`, elegidos por `optimizar()`
@@ -1860,3 +1914,242 @@ doble media móvil. El límite es que sobrestima de forma sistemática: en los `
 pendiente con la que Holt extrapola (`r n2(fit$parametros$pendiente[T_est])` miles por trimestre al final de la estimación) fue mayor que la
 observada después (`r n2(mean(diff(c(est$y[T_est], val$y))))`), y como el error de una pendiente se acumula linealmente con el horizonte, más allá de un año el
 pronóstico ya no es fiable sin reestimar con cada dato nuevo.
+
+# Contraejemplo. Suavizamiento exponencial simple sobre `AirPassengers`
+
+Los ocho ejemplos anteriores aplicaron cada método a una serie cuyo patrón corresponde a su supuesto. Este
+contraejemplo hace lo opuesto a propósito: ajusta un suavizamiento exponencial simple, pensado para un nivel
+local sin tendencia ni estacionalidad, a una serie que tiene las dos cosas. El objetivo no es que el método
+gane, sino mostrar con cifras en qué se nota que falla.
+
+## Descripción de la serie
+
+```{r}
+#| label: ej9-datos
+x <- AirPassengers
+d <- leer_serie(x,
+                fuente = "Box GEP, Jenkins GM, Reinsel GC (1994). Time Series Analysis: Forecasting and Control, 3rd ed. Prentice Hall (paquete datasets, AirPassengers)",
+                unidad = "Pasajeros de aerolíneas internacionales (miles)")
+s <- attr(d, "frecuencia")
+descripcion(x, "AirPassengers", d)
+```
+
+## Patrón de la serie
+
+```{r}
+#| label: ej9-serie
+graficar_serie(d, "Contraejemplo. Pasajeros de aerolíneas internacionales, 1949-1960")
+```
+
+```{r}
+#| label: ej9-correlograma
+#| fig-height: 6
+cg <- correlograma(d)
+cg$grafico
+```
+
+```{r}
+#| label: ej9-pruebas-serie
+#| results: asis
+n_total <- nrow(d)
+r_1 <- .contraste_rh(cg$acf, n_total, 1)
+pp(r_1, paste0("r_1 = ", n4(cg$acf[1]), " frente a una banda de ±", n4(cg$banda), ": la serie está lejos de ser ",
+               "ruido blanco desde el primer rezago, lo mismo que en cualquier serie con tendencia."))
+r_12 <- .contraste_rh(cg$acf, n_total, s)
+pp(r_12, paste0("r_", s, " = ", n4(cg$acf[s]), " también supera la banda: cada punto se parece al mismo mes del año ",
+                "anterior. Es la firma de la estacionalidad, un patrón que ninguno de los ocho métodos de este trabajo modela."))
+lb0 <- ljung_box(cg$acf, n_total, cg$m, 0)
+pp(lb0, paste0("Q = ", n4(lb0$estadistico), " con ", lb0$gl, " grados de libertad y valor p ", pv(lb0$valor_p),
+               ": rechazo contundente, hay estructura de sobra para aprovechar y perder si el método no la modela."))
+```
+
+**Lectura del patrón.** La serie crece de forma sostenida (una regresión sobre $t$ explica el
+`r n2(100 * cor(seq_len(n_total), d$y)^2)` % de la variación) y, sobre esa tendencia, repite un ciclo anual cuya amplitud
+crece con el nivel (más pasajeros en julio y agosto, menos a comienzos de año, y la diferencia entre esos meses es mayor
+al final de la serie que al principio). El supuesto de un suavizamiento exponencial simple es justo el opuesto: un nivel
+local sin tendencia, en el que Ŷ_{t+1} es un promedio ponderado de los datos pasados. Aquí ese promedio siempre queda
+por debajo en los meses de tendencia creciente y no tiene forma de anticipar el ciclo, porque solo tiene un parámetro
+(α) para dos patrones distintos que se le superponen.
+
+## Partición
+
+```{r}
+#| label: ej9-particion
+h <- min(12, floor(0.2 * n_total)); T_est <- n_total - h
+est <- d[seq_len(T_est), ]; val <- d[T_est + seq_len(h), ]
+```
+
+Con $T = `r n_total`$ y $h = `r h`$ (un ciclo completo, $s = `r s`$), el tramo de estimación va de
+`r format(est$fecha[1], "%Y-%m")` a `r format(est$fecha[T_est], "%Y-%m")` ($T_{est} = `r T_est`$) y el de validación de
+`r format(val$fecha[1], "%Y-%m")` a `r format(val$fecha[h], "%Y-%m")`.
+
+## Optimización de la constante
+
+```{r}
+#| label: ej9-optimizar
+opt <- optimizar(est$y, "ses")
+opt$grafico
+```
+
+El óptimo es $\alpha =$ `r n2(opt$optimo$alpha)`, en el borde superior de la rejilla (`r opt$en_borde`), con MSE
+`r n4(opt$optimo$mse)`. Un $\alpha$ en el borde dice que conviene copiar casi por completo el último dato: el
+suavizamiento exponencial no encuentra ninguna mezcla interior que haga mejor trabajo que el ingenuo dentro de la
+muestra, porque ni el nivel puro ni ningún promedio ponderado de datos pasados sigue una serie que a la vez crece y
+oscila con el mes.
+
+## Ajuste y medidas
+
+```{r}
+#| label: ej9-ajuste
+fit <- ajustar_ses(est$y, opt$optimo$alpha)
+pron <- fit$pronosticar(h)
+ref <- rep(tail(est$y, s), length.out = h)          # ingenuo estacional: el último ciclo completo repetido
+m_in <- .medir(est$y, fit$yhat, est$y, s)           # un paso, dentro del tramo de estimación
+m_val <- .medir(val$y, pron, est$y, s)              # h pronósticos sobre el tramo de validación
+m_ref <- .medir(val$y, ref, est$y, s)               # el ingenuo estacional, mismo tramo y mismo h
+tab(.tabla_medidas(m_in, m_val, m_ref, "Ingenuo estacional"))
+```
+
+Aquí es donde se ve la falla con números. El suavizamiento exponencial simple, que solo puede proyectar una línea
+plana, pierde contra el ingenuo estacional en las tres medidas de validación: MSE `r n2(m_val$MSE)` contra
+`r n2(m_ref$MSE)` (`r n2(100 * (m_val$MSE / m_ref$MSE - 1))` % más alto), MAD `r n2(m_val$MAD)` contra `r n2(m_ref$MAD)`
+y MASE `r n4(m_val$MASE)` contra `r n4(m_ref$MASE)`. Un MASE mayor que uno frente al ingenuo estacional significa que
+ni siquiera repetir el mismo mes del año anterior sin ajuste alguno es superado por el método: la línea plana ignora
+por completo el ciclo que el ingenuo estacional sí captura.
+
+## Validación de los errores de un paso
+
+```{r}
+#| label: ej9-validacion
+#| fig-height: 7
+cot <- .cotas("ej09", sum(!is.na(fit$errores)))
+ve <- validar_errores(fit$errores, fit$n_param, T_est, cot$dL, cot$dU)
+ve$grafico
+```
+
+Son $N = `r ve$n`$ errores de un paso, con $m = `r ve$correlograma$m`$ rezagos y banda de
+±`r n4(ve$correlograma$banda)`, calculada sobre $N$.
+
+```{r}
+#| label: ej9-pruebas-errores
+#| results: asis
+pp(ve$t_media, paste0("El error medio de un paso es ", n4(mean(ve$e)), " sobre una desviación de ", n4(sd(ve$e)),
+                      ": no se distingue de cero, así que el sesgo del método no está en el nivel promedio sino en no ",
+                      "seguir la forma del ciclo, que es lo que muestran las pruebas siguientes."))
+pp(ve$ljung_box, paste0("Q = ", n4(ve$ljung_box$estadistico), " con ", ve$ljung_box$gl, " grados de libertad (m = ",
+                        ve$correlograma$m, ", p = 1 porque se estimó alpha) y valor p ", pv(ve$ljung_box$valor_p),
+                        ": se rechaza con contundencia que los errores sean incorrelacionados. ",
+                        sum(abs(ve$correlograma$acf) > ve$correlograma$banda), " de los ", ve$correlograma$m,
+                        " rezagos salen de la banda, muy por encima del 5 % esperado por azar, y el más grande es ",
+                        "justo r_", s, " = ", n4(ve$correlograma$acf[s]), ": los errores repiten el ciclo anual completo, ",
+                        "porque el método nunca lo modeló."))
+pp(ve$jarque_bera, paste0("JB = ", n4(ve$jarque_bera$estadistico), " con asimetría ", n4(ve$jarque_bera$A), " y curtosis ",
+                          n4(ve$jarque_bera$K), " (0 y 3 para una normal) da valor p ", pv(ve$jarque_bera$valor_p),
+                          ": no se rechaza la normalidad, porque la asimetría y la curtosis de los errores no se apartan ",
+                          "mucho de las de una normal, aun cuando la prueba de Ljung-Box ya mostró que estos errores están lejos ",
+                          "de ser independientes. Normalidad y ausencia de autocorrelación son dos supuestos distintos, y este caso ",
+                          "muestra que uno puede fallar sin que el otro lo haga."))
+pp(ve$durbin_watson, paste0("d = ", n4(ve$durbin_watson$estadistico), " queda por debajo de d_L = ", n2(cot$dL), " (N = ", ve$n,
+                            ", k' = 1): se rechaza la ausencia de autocorrelación positiva de orden uno, coherente con r_1 = ",
+                            n4(ve$correlograma$acf[1]), ", aunque esa es apenas la punta de una estructura de período ", s,
+                            " mucho más grande que Durbin-Watson, pensada para el rezago uno, no resume."))
+```
+
+## Gráfico final
+
+```{r}
+#| label: ej9-final
+.grafico_pronostico(d, fit$yhat, pron, ref, "Contraejemplo. Suavizamiento exponencial simple: ajuste y pronóstico",
+                    nombre_referente = "Referente ingenuo estacional")
+```
+
+```{r}
+#| label: ej9-resumen
+#| include: false
+resumen[[9]] <- .fila_resumen("C", "AirPassengers", fit, m_val, m_ref)
+```
+
+En el gráfico se ve la falla a simple vista: el ajuste dentro de muestra queda sistemáticamente por debajo del pico
+de cada julio-agosto y por encima del valle de cada comienzo de año, y el pronóstico de los `r h` meses de validación
+es una línea prácticamente plana que no repite el ciclo que la propia serie de validación sí muestra.
+
+## Conclusión
+
+Se ajustó un suavizamiento exponencial simple con $\alpha =$ `r n2(opt$optimo$alpha)`, en el borde superior de la
+rejilla, sobre los `r T_est` meses de estimación. En los `r h` meses de validación el MASE es `r n4(m_val$MASE)`,
+frente a `r n4(m_ref$MASE)` del ingenuo estacional: el método **pierde** frente a un referente que se limita a repetir
+el ciclo anterior, algo que no ocurrió en ninguno de los ocho ejemplos previos (ver la tabla resumen). La validación de
+errores confirma el mecanismo de la falla: el error medio es nulo (valor p `r pv(ve$t_media$valor_p)`), pero Ljung-Box
+rechaza con fuerza (valor p `r pv(ve$ljung_box$valor_p)`) por una autocorrelación estacional en r_`r s` =
+`r n4(ve$correlograma$acf[s])`, muy por fuera de la banda de ±`r n4(ve$correlograma$banda)`, y Durbin-Watson también
+rechaza (`r n4(ve$durbin_watson$estadistico)` frente a $d_L =$ `r n2(cot$dL)`). El único supuesto que no se rechaza es la
+normalidad (Jarque-Bera, valor p `r pv(ve$jarque_bera$valor_p)`), lo que muestra que el problema del método aquí no es
+la forma de los errores sino su dependencia con el calendario, exactamente lo que el diagnóstico de la serie
+(r_`r s` = `r n4(cg$acf[s])` en la sección de patrón) ya anticipaba antes de ajustar nada.
+
+## Recomendación
+
+Este método no le sirve a quien pronostique `AirPassengers`: pierde frente al ingenuo estacional en las tres medidas
+de validación y sus errores dejan un patrón de calendario que cualquier revisión mínima detecta. El límite no es de
+grado sino de especificación: ningún valor de α lo arregla, porque el problema no es la velocidad de reacción del
+nivel sino la ausencia de un término que module la tendencia y otro que module la estación. La lectura correcta de este
+contraejemplo no es "el suavizamiento exponencial simple es malo", sino que cada uno de los ocho métodos de esta caja
+de herramientas debe aplicarse a una serie cuyo patrón corresponda a su supuesto, como se hizo en los ejemplos 1 a 8, y
+verificar ese supuesto con el gráfico y el correlograma antes de ajustar nada.
+
+# Tabla resumen
+
+```{r}
+#| label: resumen-tabla
+resumen_df <- do.call(rbind, resumen)
+supera <- resumen_df$MASE_metodo < resumen_df$MASE_referente
+n_supera <- sum(supera)
+tabla_resumen <- data.frame(Ejemplo = resumen_df$ejemplo, Serie = resumen_df$serie,
+                            Método = resumen_df$metodo,
+                            `MASE método` = resumen_df$MASE_metodo,
+                            `MASE referente` = resumen_df$MASE_referente,
+                            `Supera al referente` = ifelse(supera, "Sí", "No"),
+                            check.names = FALSE)
+tab(tabla_resumen)
+```
+
+La tabla reúne el MASE de validación de cada método frente a su referente (el ingenuo, o el ingenuo estacional en
+`JohnsonJohnson` y `AirPassengers`), sobre el mismo tramo y el mismo horizonte $h$ declarados en cada ejemplo. De las
+`r nrow(tabla_resumen)` filas, `r n_supera` tienen un MASE del método menor que el de su referente; la que no lo tiene
+entre los ocho primeros es la media móvil del ejemplo 2, por un margen mínimo
+(`r n4(tabla_resumen$"MASE método"[2])` contra `r n4(tabla_resumen$"MASE referente"[2])`), y se reportó así en su
+conclusión sin ocultarlo. El contraejemplo (fila C) es, a propósito, el caso donde el método pierde por el margen más
+amplio: `r n4(tabla_resumen$"MASE método"[9])` contra `r n4(tabla_resumen$"MASE referente"[9])`, la firma numérica de
+aplicar un suavizamiento sin tendencia ni estacionalidad a una serie que tiene las dos cosas.
+
+# Referencias
+
+- Box GEP, Jenkins GM, Reinsel GC (1994). *Time Series Analysis: Forecasting and Control*, 3rd ed. Prentice Hall
+  (fuente de `AirPassengers`).
+- Brockwell PJ, Davis RA (1991). *Time Series: Theory and Methods*, 2nd ed. Springer (fuente de `LakeHuron`).
+- Brockwell PJ, Davis RA (1996). *Introduction to Time Series and Forecasting*. Springer (fuente de `austres`).
+- Durbin J, Koopman SJ (2001). *Time Series Analysis by State Space Methods*. Oxford University Press (fuente de
+  `Nile`).
+- Durbin J, Watson GS (1951). Testing for Serial Correlation in Least Squares Regression II. *Biometrika*, 38(1/2),
+  159-178.
+- F.A.A. *Statistical Handbook of Aviation* (fuente de `airmiles`).
+- Hyndman RJ, Koehler AB (2006). Another look at measures of forecast accuracy. *International Journal of
+  Forecasting*, 22(4), 679-688 (definición del MASE).
+- Imhof JP (1961). Computing the Distribution of Quadratic Forms in Normal Variables. *Biometrika*, 48(3/4), 419-426
+  (integral usada para las cotas exactas de Durbin-Watson).
+- Ljung GM, Box GEP (1978). On a Measure of Lack of Fit in Time Series Models. *Biometrika*, 65(2), 297-303.
+- Newey WK, West KD (1987). A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent
+  Covariance Matrix. *Econometrica*, 55(3), 703-708.
+- Savin NE, White KJ (1977). The Durbin-Watson Test for Serial Correlation with Extreme Sample Sizes or Many
+  Regressors. *Econometrica*, 45(8), 1989-1996 (tabla de valores críticos de $d_L$ y $d_U$).
+- Shumway RH, Stoffer DS (2000). *Time Series Analysis and its Applications*. Springer (fuente de `JohnsonJohnson`).
+- The World Almanac and Book of Facts, 1975 Edition (fuente de `discoveries`).
+- Notas de clase, Series de Tiempo (3009297), Universidad Nacional de Colombia, sede Medellín, 2026-II (definiciones,
+  inicializaciones y demostraciones de las formas recursivas de los métodos).
+
+# Información de la sesión
+
+```{r}
+#| label: sesion-info
+sessionInfo()
+```
