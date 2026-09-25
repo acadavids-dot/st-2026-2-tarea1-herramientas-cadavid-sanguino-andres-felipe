@@ -125,9 +125,10 @@ Estas son las que determinan las cifras de este documento.
 ### Sobre el uso de IA {-}
 
 Este trabajo se desarrolló de forma conjunta entre el estudiante y Claude (Anthropic), utilizado como asistente de
-programación. El estudiante dirigió el proceso, aprobó el plan de cada fase, revisó y modificó partes del código;
-Claude escribió gran parte del código de las funciones y de los ejemplos, ejecutó las verificaciones contra R y
-ensambló el informe. Las interpretaciones de los ejemplos 1 a 6 (lectura
+programación. El proyecto partió de una propuesta inicial aportada por el estudiante (borradores del código, del
+informe y del README, y la especificación del proyecto). El estudiante dirigió el proceso, aprobó el plan de cada fase,
+revisó y modificó partes del código; Claude revisó, corrigió, reescribió y amplió ese código, ejecutó las
+verificaciones contra R y ensambló el informe. Las interpretaciones de los ejemplos 1 a 6 (lectura
 del patrón, lectura de cada prueba, optimización, medidas, conclusión y recomendación) las redactó el estudiante; Claude
 las integró convirtiendo cada cifra en código en línea y contrastándolas con los resultados de la corrida. Las
 interpretaciones de los ejemplos 7 y 8 y del contraejemplo, y los textos descriptivos de todos los ejemplos, siguen con

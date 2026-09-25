@@ -129,10 +129,13 @@ firma numérica de aplicar un suavizamiento sin tendencia ni estacionalidad a un
 Este trabajo se desarrolló de forma conjunta entre el estudiante y Claude (Anthropic, modelo Sonnet 5), utilizado como
 asistente de programación en sesiones de Claude Code sobre este repositorio.
 
+**Punto de partida.** El proyecto partió de una propuesta inicial aportada por el estudiante: borradores de las
+funciones de `R/`, de `ejemplos.R`, del informe y del README, y la especificación del proyecto (`CLAUDE.md`).
+
 **Reparto del trabajo.** El estudiante dirigió el proceso: aprobó el plan de cada fase antes de la implementación,
 tomó las decisiones de entrega (repositorio público, fecha confirmada con el profesor), revisó y modificó partes del
 código, solicitó una auditoría completa del código y redactó las interpretaciones de los ejemplos 1 a 6 del informe.
-Claude escribió gran parte del código de las funciones y de los ejemplos, ejecutó las verificaciones contra las
+Claude revisó, corrigió, reescribió y amplió el código de la propuesta inicial, ejecutó las verificaciones contra las
 funciones de R, integró las interpretaciones del estudiante al informe convirtiendo sus cifras en código en línea,
 redactó los demás textos del informe (las interpretaciones de los ejemplos 7 y 8 y del contraejemplo, y los textos
 descriptivos de todos los ejemplos) y explicó el código al estudiante para que pueda entenderlo y sustentarlo.
